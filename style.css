@@ -25,5 +25,4 @@ body { font-family: 'Inter', sans-serif; }
 .z-\[1000\] { z-index: 1000; }
 .max-h-\[90vh\] { max-height: 90vh; }
 input, select, textarea { border-color: #d1d5db; }
-
 input:focus, select:focus, textarea:focus { border-color: #3b82f6; ring: 2px; }
