@@ -68,12 +68,26 @@
                             <input type="text" id="c-name" required class="w-full border border-gray-300 p-2 rounded-lg">
                         </div>
                         <div>
-                            <label for="c-email" class="block text-sm font-medium text-gray-700 mb-1">E-mail</label>
-                            <input type="email" id="c-email" class="w-full border border-gray-300 p-2 rounded-lg">
+                            <label for="c-cpf" class="block text-sm font-medium text-gray-700 mb-1">CPF</label>
+                            <input type="text" id="c-cpf" class="w-full border border-gray-300 p-2 rounded-lg" placeholder="000.000.000-00">
                         </div>
                         <div>
                             <label for="c-dob" class="block text-sm font-medium text-gray-700 mb-1">Data de Nascimento</label>
                             <input type="date" id="c-dob" class="w-full border border-gray-300 p-2 rounded-lg">
+                        </div>
+                    </div>
+
+                    <div class="space-y-4">
+                        <h3 class="text-sm font-semibold text-gray-800 border-b pb-2 uppercase tracking-wide">Contato e Perfil</h3>
+                        <div>
+                            <label for="c-phone" class="block text-sm font-medium text-gray-700 mb-1">Telefone</label>
+                            <div class="flex items-center">
+                                <input type="tel" id="c-phone" class="w-full border border-gray-300 p-2 rounded-l-lg" placeholder="(00) 00000-0000">
+                                <div class="flex items-center pl-3 pr-2 border-t border-b border-r rounded-r-lg h-full">
+                                    <input id="c-whatsapp" type="checkbox" class="h-4 w-4 text-green-600 border-gray-300 rounded">
+                                    <label for="c-whatsapp" class="ml-2 text-sm text-gray-600">WhatsApp</label>
+                                </div>
+                            </div>
                         </div>
                         <div>
                             <label for="c-sexo" class="block text-sm font-medium text-gray-700 mb-1">Sexo</label>
@@ -93,50 +107,6 @@
                                 <option value="Outro">Outro</option>
                             </select>
                         </div>
-                        <div>
-                            <label for="c-profissao" class="block text-sm font-medium text-gray-700 mb-1">Profissão</label>
-                            <input type="text" id="c-profissao" class="w-full border border-gray-300 p-2 rounded-lg">
-                        </div>
-                    </div>
-
-                    <div class="space-y-4">
-                        <h3 class="text-sm font-semibold text-gray-800 border-b pb-2 uppercase tracking-wide">Documentos e Contato</h3>
-                        <div>
-                            <label for="c-cpf" class="block text-sm font-medium text-gray-700 mb-1">CPF</label>
-                            <input type="text" id="c-cpf" class="w-full border border-gray-300 p-2 rounded-lg" placeholder="000.000.000-00">
-                        </div>
-                        <div>
-                            <label for="c-rg" class="block text-sm font-medium text-gray-700 mb-1">RG</label>
-                            <input type="text" id="c-rg" class="w-full border border-gray-300 p-2 rounded-lg">
-                        </div>
-                        <div class="grid grid-cols-3 gap-2">
-                            <div class="col-span-1">
-                                <label for="c-voterid" class="block text-sm font-medium text-gray-700 mb-1">Título</label>
-                                <input type="text" id="c-voterid" class="w-full border border-gray-300 p-2 rounded-lg">
-                            </div>
-                            <div>
-                                <label for="c-zona" class="block text-sm font-medium text-gray-700 mb-1">Zona</label>
-                                <input type="text" id="c-zona" class="w-full border border-gray-300 p-2 rounded-lg">
-                            </div>
-                            <div>
-                                <label for="c-secao" class="block text-sm font-medium text-gray-700 mb-1">Seção</label>
-                                <input type="text" id="c-secao" class="w-full border border-gray-300 p-2 rounded-lg">
-                            </div>
-                        </div>
-                        <div>
-                            <label for="c-phone" class="block text-sm font-medium text-gray-700 mb-1">Telefone</label>
-                            <div class="flex items-center">
-                                <input type="tel" id="c-phone" class="w-full border border-gray-300 p-2 rounded-l-lg" placeholder="(00) 00000-0000">
-                                <div class="flex items-center pl-3 pr-2 border-t border-b border-r rounded-r-lg h-full">
-                                    <input id="c-whatsapp" type="checkbox" class="h-4 w-4 text-green-600 border-gray-300 rounded">
-                                    <label for="c-whatsapp" class="ml-2 text-sm text-gray-600">WhatsApp</label>
-                                </div>
-                            </div>
-                        </div>
-                        <div>
-                            <label for="c-photourl" class="block text-sm font-medium text-gray-700 mb-1">Foto (link, opcional)</label>
-                            <input type="text" id="c-photourl" class="w-full border border-gray-300 p-2 rounded-lg" placeholder="https://...">
-                        </div>
                     </div>
                 </div>
 
@@ -151,6 +121,17 @@
                         <div><label for="c-cidade" class="block text-sm font-medium text-gray-700 mb-1">Cidade</label><input type="text" id="c-cidade" class="w-full border border-gray-300 p-2 rounded-lg"></div>
                         <div><label for="c-estado" class="block text-sm font-medium text-gray-700 mb-1">UF</label><input type="text" id="c-estado" maxlength="2" class="w-full border border-gray-300 p-2 rounded-lg"></div>
                     </div>
+                </div>
+
+                <div>
+                    <label for="c-indicadopor" class="block text-sm font-medium text-gray-700 mb-1">Indicado por</label>
+                    <input type="text" id="c-indicadopor" class="w-full border border-gray-300 p-2 rounded-lg" placeholder="Ex: Sd Fulano">
+                    <p class="text-xs text-gray-500 mt-1">Essa informação será salva junto ao campo Complemento do endereço.</p>
+                </div>
+
+                <div>
+                    <label for="c-escola" class="block text-sm font-medium text-gray-700 mb-1">Escola</label>
+                    <input type="text" id="c-escola" class="w-full border border-gray-300 p-2 rounded-lg">
                 </div>
 
                 <div class="flex justify-end pt-4 border-t">
