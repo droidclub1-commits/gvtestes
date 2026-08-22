@@ -1,6 +1,6 @@
-const SUPABASE_URL = 'https://memsmrsntvkneyylggto.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1lbXNtcnNudHZrbmV5eWxnZ3RvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE2MjgyMjgsImV4cCI6MjA4NzIwNDIyOH0.QoyF_On4xNjCjfgXcXH2ycBzVdDP8GoOY66mBsdJW1M';
-const EDGE_FUNCTION_URL = 'https://memsmrsntvkneyylggto.supabase.co/functions/v1/quick-handler';
+const SUPABASE_URL = 'https://gccxghayghuqrwdmtwnn.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdjY3hnaGF5Z2h1cXJ3ZG10d25uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0MzA3NDcsImV4cCI6MjEwMzAwNjc0N30.kUaWnK6Wx-M6Y3BGZM1JYo0a80DF-tNPCsxvZN054CM';
+const EDGE_FUNCTION_URL = 'https://gccxghayghuqrwdmtwnn.supabase.co/functions/v1/manage-users';
 const { createClient } = supabase;
 let sb, user = null, userRole = null; // userRole: 'admin' | 'cadastrador'
 try {
@@ -28,7 +28,7 @@ let logoBtn, logoutBtn, sidebarNav, addCidadaoBtn, addDemandaGeralBtn,
     modalContent, cidadaoDetailsModal, demandaModal, demandaDetailsModal,
     mapModal, confirmationModal, cidadaoForm, demandaForm, addNoteForm,
     searchInput, filterType, filterBairro, filterCidade, filterLeader, filterSexo,
-    filterFaixaEtaria, clearFiltersBtn, generateReportBtn, viewMapBtn,
+    filterFaixaEtaria, filterLocalTrabalho, clearFiltersBtn, generateReportBtn, viewMapBtn,
     demandaFilterStatus, demandaFilterLeader, demandaSearchNome, demandaClearFiltersBtn,
     cidadaosGrid, allDemandasList, cidadaoLeaderSelect, demandaCidadaoSelect,
     cancelDeleteBtn, confirmDeleteBtn, cidadaoName, cidadaoEmail, cidadaoDob,
@@ -144,6 +144,7 @@ document.addEventListener('DOMContentLoaded', () => {
         filterLeader = document.getElementById('filter-leader');
         filterSexo = document.getElementById('filter-sexo');
         filterFaixaEtaria = document.getElementById('filter-faixa-etaria');
+        filterLocalTrabalho = document.getElementById('filter-local-trabalho');
         clearFiltersBtn = document.getElementById('clear-filters-btn');
         generateReportBtn = document.getElementById('generate-report-btn');
         viewMapBtn = document.getElementById('view-map-btn');
@@ -252,6 +253,11 @@ document.addEventListener('DOMContentLoaded', () => {
         filterLeader.addEventListener('change', () => renderCidadaos());
         filterSexo.addEventListener('change', () => renderCidadaos());
         filterFaixaEtaria.addEventListener('change', () => renderCidadaos());
+        let filterLocalTrabalhoDebounce;
+        filterLocalTrabalho.addEventListener('input', () => {
+            clearTimeout(filterLocalTrabalhoDebounce);
+            filterLocalTrabalhoDebounce = setTimeout(() => renderCidadaos(), 350);
+        });
         clearFiltersBtn.addEventListener('click', clearCidadaoFilters);
         loadMoreBtn.addEventListener('click', renderMoreCidadaos);
         demandaFilterStatus.addEventListener('change', () => loadDemandasPage(true));
@@ -311,7 +317,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     // ── PERFORMANCE: controle de estado de busca server-side ──────────────────
-    let serverSearchState = { search: '', type: '', bairro: '', cidade: '', leader: '', sexo: '', faixaEtaria: '' };
+    let serverSearchState = { search: '', type: '', bairro: '', cidade: '', leader: '', sexo: '', faixaEtaria: '', localTrabalho: '' };
 
     // ── Paginação server-side de demandas ─────────────────────────────────
     const DEMANDAS_PAGE_SIZE = 15;
@@ -427,6 +433,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (s.cidade)  query = query.eq('cidade', s.cidade);
         if (s.leader)  query = query.eq('leader', s.leader);
         if (s.sexo)    query = query.eq('sexo', s.sexo);
+        if (s.localTrabalho) query = query.ilike('localtrabalho', `%${s.localTrabalho}%`);
 
         // Faixa etária: calcula intervalo de datas no servidor
         if (s.faixaEtaria && s.faixaEtaria !== 'N/A') {
@@ -843,7 +850,8 @@ document.addEventListener('DOMContentLoaded', () => {
             cidade:      filterCidade ? filterCidade.value : '',
             leader:      filterLeader.value,
             sexo:        filterSexo.value,
-            faixaEtaria: filterFaixaEtaria.value
+            faixaEtaria: filterFaixaEtaria.value,
+            localTrabalho: filterLocalTrabalho.value.trim()
         };
         loadCidadaosPage(true);
     }
@@ -1118,6 +1126,7 @@ document.addEventListener('DOMContentLoaded', () => {
         filterLeader.value = '';
         filterSexo.value = '';
         filterFaixaEtaria.value = '';
+        filterLocalTrabalho.value = '';
         renderCidadaos();
     }
     function clearDemandaFilters() {
@@ -1150,6 +1159,7 @@ document.addEventListener('DOMContentLoaded', () => {
         await Promise.all([
             updateAniversariantes(),
             updateCidadaosPorBairroChart(),
+            updateCidadaosPorMunicipioChart(),
             updateCidadaosPorMunicipioChart(),
             updateCidadaosPorSexoChart(),
             updateCidadaosPorFaixaEtariaChart()
@@ -1437,7 +1447,39 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch(e) { console.warn('Chart município:', e); }
     }
 
-        
+    async function updateCidadaosPorMunicipioChart() {
+        const ctx = document.getElementById('cidadaos-por-municipio-chart');
+        if (!ctx) return;
+        try {
+            const { data, error } = await sb.from('cidadaos').select('cidade');
+            if (error) throw error;
+            const contagem = (data || []).reduce((acc, c) => {
+                const cidade = c.cidade || 'Não Informado';
+                acc[cidade] = (acc[cidade] || 0) + 1;
+                return acc;
+            }, {});
+            const sorted = Object.entries(contagem).sort((a, b) => b[1] - a[1]);
+            const labels = sorted.map(([k]) => k);
+            const values = sorted.map(([, v]) => v);
+            const colors = ['#3B82F6','#10B981','#F59E0B','#EF4444','#8B5CF6','#06B6D4','#84CC16','#F97316'];
+            if (cidadaosMunicipioChart) cidadaosMunicipioChart.destroy();
+            cidadaosMunicipioChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: { labels, datasets: [{ data: values, backgroundColor: colors.slice(0, labels.length) }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        tooltip: { callbacks: { label: (c) => {
+                            const total = c.dataset.data.reduce((a, b) => a + b, 0);
+                            return ` ${c.label}: ${c.parsed} (${((c.parsed/total)*100).toFixed(1)}%)`;
+                        }}}
+                    }
+                }
+            });
+        } catch(e) { console.warn('Chart município:', e); }
+    }
+
     async function updateCidadaosPorBairroChart() {
         const ctx = document.getElementById('cidadaos-por-bairro-chart');
         if (!ctx) return;
@@ -1855,6 +1897,7 @@ function closeMapModal() {
         if (s.cidade)  query = query.eq('cidade', s.cidade);
         if (s.leader)  query = query.eq('leader', s.leader);
         if (s.sexo)    query = query.eq('sexo', s.sexo);
+        if (s.localTrabalho) query = query.ilike('localtrabalho', `%${s.localTrabalho}%`);
         query = query.order('name', { ascending: true });
 
         const { data, error } = await query;
@@ -1893,6 +1936,7 @@ function closeMapModal() {
         if (s.cidade)  query = query.eq('cidade', s.cidade);
         if (s.leader)  query = query.eq('leader', s.leader);
         if (s.sexo)    query = query.eq('sexo', s.sexo);
+        if (s.localTrabalho) query = query.ilike('localtrabalho', `%${s.localTrabalho}%`);
         query = query.order('name', { ascending: true });
 
         const { data, error } = await query;
@@ -2556,7 +2600,7 @@ function closeMapModal() {
         const newPage = document.getElementById(pageId);
         if (newPage) {
             newPage.classList.remove('hidden');
-            const flexPages = ['dashboard-page','cidadaos-page','demandas-page','cobertura-page','backup-page','utilizadores-page'];
+            const flexPages = ['dashboard-page','cidadaos-page','demandas-page','cobertura-page','backup-page'];
             if (flexPages.includes(pageId)) newPage.classList.add('flex', 'flex-col');
         }
         document.querySelectorAll('#sidebar-nav a').forEach(link => {
