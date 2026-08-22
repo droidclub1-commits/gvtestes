@@ -3,8 +3,8 @@
 // ═══════════════════════════════════════════════════════════════
 // Mesma URL e anon key públicas usadas em app.js — não são segredo,
 // a proteção real é a senha verificada no servidor (Edge Function).
-const SUPABASE_URL = 'https://memsmrsntvkneyylggto.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1lbXNtcnNudHZrbmV5eWxnZ3RvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE2MjgyMjgsImV4cCI6MjA4NzIwNDIyOH0.QoyF_On4xNjCjfgXcXH2ycBzVdDP8GoOY66mBsdJW1M';
+const SUPABASE_URL = 'https://gccxghayghuqrwdmtwnn.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdjY3hnaGF5Z2h1cXJ3ZG10d25uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0MzA3NDcsImV4cCI6MjEwMzAwNjc0N30.kUaWnK6Wx-M6Y3BGZM1JYo0a80DF-tNPCsxvZN054CM';
 const FUNCTION_URL = `${SUPABASE_URL}/functions/v1/public-cadastro`;
 
 // Senha fica só na memória desta aba — nunca é salva em localStorage
@@ -60,7 +60,6 @@ async function callFunction(payload) {
 document.addEventListener('DOMContentLoaded', () => {
     applyMask('c-cpf', '999.999.999-99');
     applyMask('c-phone', '(99) 99999-9999');
-    applyMask('c-voterid', '9999 9999 9999');
     applyMask('c-cep', '99999-999');
 
     const gatePage = document.getElementById('gate-page');
@@ -105,29 +104,35 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         saveBtn.disabled = true;
         saveBtn.innerHTML = '<div class="spinner"></div>';
+
+        // "Indicado por" não tem coluna própria no banco — é anexado ao
+        // campo Complemento do endereço como observação de texto.
+        const complementoBase = v(document.getElementById('c-complemento').value);
+        const indicadoPor = v(document.getElementById('c-indicadopor').value);
+        let complementoFinal = complementoBase;
+        if (indicadoPor) {
+            complementoFinal = complementoBase
+                ? `${complementoBase} | Indicado por: ${indicadoPor}`
+                : `Indicado por: ${indicadoPor}`;
+        }
+
         const payload = {
             action: 'create',
             password: accessPassword,
             honeypot: document.getElementById('website').value,
             cidadao: {
                 name,
-                email: v(document.getElementById('c-email').value),
                 dob: document.getElementById('c-dob').value || null,
                 sexo: document.getElementById('c-sexo').value || null,
                 type: document.getElementById('c-type').value || 'Outro',
-                profissao: v(document.getElementById('c-profissao').value),
                 cpf: v(document.getElementById('c-cpf').value),
-                rg: v(document.getElementById('c-rg').value),
-                voterid: v(document.getElementById('c-voterid').value),
-                zona: v(document.getElementById('c-zona').value),
-                secao: v(document.getElementById('c-secao').value),
+                localtrabalho: v(document.getElementById('c-escola').value),
                 phone: v(document.getElementById('c-phone').value),
                 whatsapp: document.getElementById('c-whatsapp').checked,
-                photourl: v(document.getElementById('c-photourl').value),
                 cep: v(document.getElementById('c-cep').value),
                 logradouro: v(document.getElementById('c-logradouro').value),
                 numero: v(document.getElementById('c-numero').value),
-                complemento: v(document.getElementById('c-complemento').value),
+                complemento: complementoFinal,
                 bairro: v(document.getElementById('c-bairro').value),
                 cidade: v(document.getElementById('c-cidade').value),
                 estado: v(document.getElementById('c-estado').value)
