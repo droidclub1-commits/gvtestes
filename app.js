@@ -1,3 +1,5 @@
+import { showToast, getInitials, getStatusInfo, formatarData, getFaixaEtaria } from './js/utils.js';
+
 const SUPABASE_URL = 'https://gccxghayghuqrwdmtwnn.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdjY3hnaGF5Z2h1cXJ3ZG10d25uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0MzA3NDcsImV4cCI6MjEwMzAwNjc0N30.kUaWnK6Wx-M6Y3BGZM1JYo0a80DF-tNPCsxvZN054CM';
 const EDGE_FUNCTION_URL = 'https://gccxghayghuqrwdmtwnn.supabase.co/functions/v1/manage-users';
@@ -2615,66 +2617,5 @@ function closeMapModal() {
         if (pageId === 'utilizadores-page') {
             loadUsers();
         }
-    }
-    function showToast(message, type = 'info') {
-        const container = document.getElementById('toast-container');
-        const toast = document.createElement('div');
-        let bgColor, textColor, icon;
-        switch (type) {
-            case 'success': bgColor = 'bg-green-500'; textColor = 'text-white'; icon = '✓'; break;
-            case 'error': bgColor = 'bg-red-500'; textColor = 'text-white'; icon = '✖'; break;
-            case 'warning': bgColor = 'bg-yellow-400'; textColor = 'text-black'; icon = '!' ; break;
-            default: bgColor = 'bg-blue-500'; textColor = 'text-white'; icon = 'ℹ'; break;
-        }
-        toast.className = `p-4 rounded-lg shadow-lg flex items-center gap-3 ${bgColor} ${textColor} transform translate-x-full opacity-0 transition-all duration-300 ease-out`;
-        toast.innerHTML = `<span class="font-bold text-lg">${icon}</span> <span>${message}</span>`;
-        container.appendChild(toast);
-        setTimeout(() => { toast.classList.remove('translate-x-full', 'opacity-0'); }, 10);
-        setTimeout(() => {
-            toast.classList.add('translate-x-full', 'opacity-0');
-            setTimeout(() => { toast.remove(); }, 300);
-        }, 3000);
-    }
-    function getInitials(name) {
-        if (!name) return '?';
-        const parts = name.split(' ');
-        if (parts.length > 1) {
-            return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-        }
-        return (name[0]).toUpperCase();
-    }
-    function getStatusInfo(status) {
-        switch (status) {
-            case 'pending': return { text: 'Pendente', classes: 'status-badge status-pending', color: '#F59E0B' };
-            case 'inprogress': return { text: 'Em Andamento', classes: 'status-badge status-inprogress', color: '#3B82F6' };
-            case 'completed': return { text: 'Concluída', classes: 'status-badge status-completed', color: '#10B981' };
-            default: return { text: 'N/A', classes: 'status-badge', color: '#6B7280' };
-        }
-    }
-    function formatarData(dateString) {
-        if (!dateString) return 'N/A';
-        try {
-            const parts = dateString.split('-');
-            if (parts.length !== 3) return dateString;
-            return `${parts[2]}/${parts[1]}/${parts[0]}`;
-        } catch (e) { return dateString; }
-    }
-    function getFaixaEtaria(dob) {
-        if (!dob) return 'N/A';
-        try {
-            const birthDate = new Date(dob);
-            if (isNaN(birthDate.getTime())) return 'N/A';
-            const today = new Date();
-            let age = today.getFullYear() - birthDate.getFullYear();
-            const m = today.getMonth() - birthDate.getMonth();
-            if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) { age--; }
-            if (age <= 17) return '0-17';
-            if (age <= 25) return '18-25';
-            if (age <= 35) return '26-35';
-            if (age <= 50) return '36-50';
-            if (age <= 65) return '51-65';
-            if (age >= 66) return '66+';
-            return 'N/A';
-        } catch (e) { return 'N/A'; }
     }
 });
