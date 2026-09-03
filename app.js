@@ -2,9 +2,8 @@ import { showToast, getInitials, getStatusInfo, formatarData, getFaixaEtaria } f
 import { SUPABASE_URL, SUPABASE_KEY, EDGE_FUNCTION_URL, sb } from './js/config.js';
 import { backupData, renderBackupHistory } from './js/backup.js';
 
-let user = null, userRole = null; // userRole: 'admin' | 'cadastrador'
-let allCidadaos = [], allDemandas = [], allLeaders = [];
-// userRole carregado após login ('admin' ou 'cadastrador')
+import { state } from './js/state.js';
+// state.userRole carregado após login ('admin' ou 'cadastrador')
 let allUsers = []; // lista de utilizadores (só admin)
 // Paginação server-side — controlada por CIDADAOS_PAGE_SIZE e cidadaosServerOffset
 let currentEditingId = null;
@@ -43,7 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const passwordInput = document.getElementById('password');
     sb.auth.onAuthStateChange((event, session) => {
         if (session && session.user) {
-            user = session.user;
+            state.user = session.user;
             loginPage.classList.add('hidden');
             appContainer.style.display = 'flex';
             if (!appInitialized && !_initLock) {
@@ -51,9 +50,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 initializeMainApp().finally(() => { _initLock = false; });
             }
         } else if (event === 'SIGNED_OUT' || (event === 'INITIAL_SESSION' && !session)) {
-            user = null;
-            userRole = null;
-            allCidadaos = []; allDemandas = []; allLeaders = [];
+            state.user = null;
+            state.userRole = null;
+            state.allCidadaos = []; state.allDemandas = []; state.allLeaders = [];
             appInitialized = false;
             _initLock = false;
             // Restaura botão — independente de qual elemento está no DOM agora
@@ -86,7 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function manageSessionOnLoad() {
         const { data: { session } } = await sb.auth.getSession();
         if (session && session.user) {
-            user = session.user;
+            state.user = session.user;
             loginPage.classList.add('hidden');
             appContainer.style.display = 'flex';
             if (!appInitialized && !_initLock) {
@@ -95,7 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 finally { _initLock = false; }
             }
         } else {
-            user = null;
+            state.user = null;
             loginPage.classList.remove('hidden');
             appContainer.style.display = 'none';
         }
@@ -103,8 +102,8 @@ document.addEventListener('DOMContentLoaded', () => {
     manageSessionOnLoad();
     async function initializeMainApp() {
         if (appInitialized) return;
-        allCidadaos = []; allDemandas = []; allLeaders = []; allUsers = [];
-        userRole = null;
+        state.allCidadaos = []; state.allDemandas = []; state.allLeaders = []; allUsers = [];
+        state.userRole = null;
         await new Promise(resolve => setTimeout(resolve, 50)); 
         logoBtn = document.getElementById('logo-btn'); 
         logoutBtn = document.getElementById('logout-btn');
@@ -322,20 +321,20 @@ document.addEventListener('DOMContentLoaded', () => {
     let cidadaosServerOffset = 0;
 
     async function loadInitialData() {
-        if (!user) return;
+        if (!state.user) return;
         try {
-            // ── 1. Perfil primeiro — define userRole antes de tudo ───────
+            // ── 1. Perfil primeiro — define state.userRole antes de tudo ───────
             const { data: profileData, error: profileError } = await sb
                 .from('profiles')
                 .select('role')
-                .eq('id', user.id)
+                .eq('id', state.user.id)
                 .single();
             if (profileError || !profileData) {
                 await sb.auth.signOut();
                 showToast('Acesso negado. O seu utilizador não tem perfil atribuído.', 'error');
                 throw new Error('Perfil não encontrado.');
             }
-            userRole = profileData.role;
+            state.userRole = profileData.role;
             applyRoleUI();
 
             // ── 2. Líderes + demandas + bairros em paralelo ──────────────
@@ -347,7 +346,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 loadBairrosDistintos()
             ]);
             if (leadersRes.error) throw leadersRes.error;
-            allLeaders = leadersRes.data;
+            state.allLeaders = leadersRes.data;
 
             updateLeaderSelects();
             updateBairroFilter();
@@ -357,7 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
             await Promise.all([
                 loadCidadaosPage(true),
                 updateDashboard(),
-                userRole === 'admin' ? loadUsers() : Promise.resolve()
+                state.userRole === 'admin' ? loadUsers() : Promise.resolve()
             ]);
 
             return true;
@@ -369,7 +368,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ── Ajusta interface conforme o perfil do utilizador ────────────────
     function applyRoleUI() {
-        if (userRole === 'cadastrador') {
+        if (state.userRole === 'cadastrador') {
             // Esconde funcionalidades exclusivas do admin
             const els = [
                 document.getElementById('generate-report-btn'), // relatório global
@@ -384,7 +383,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     a.parentElement.classList.add('hidden');
                 }
             });
-            // Botão delete nos cards é ocultado em buildCidadaoCard via userRole
+            // Botão delete nos cards é ocultado em buildCidadaoCard via state.userRole
         }
     }
 
@@ -397,7 +396,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 .order('bairro', { ascending: true });
             if (error) throw error;
             const bairrosUnicos = [...new Set(data.map(c => c.bairro).filter(Boolean))];
-            // Guarda para o filtro sem precisar de allCidadaos
+            // Guarda para o filtro sem precisar de state.allCidadaos
             window._bairrosDisponiveis = bairrosUnicos;
         } catch (e) {
             console.warn('Não foi possível carregar bairros:', e);
@@ -411,7 +410,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (reset) {
             cidadaosServerOffset = 0;
             cidadaosGrid.innerHTML = '';
-            allCidadaos = []; // limpa cache local
+            state.allCidadaos = []; // limpa cache local
         }
 
         const s = serverSearchState;
@@ -450,12 +449,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (error) { console.error(error); showToast('Erro ao carregar cidadãos.', 'error'); return; }
 
         totalCidadaosCount = count ?? totalCidadaosCount;
-        allCidadaos = reset ? data : [...allCidadaos, ...data];
+        state.allCidadaos = reset ? data : [...state.allCidadaos, ...data];
         cidadaosServerOffset += data.length;
 
         // Renderiza somente o batch novo
         if (reset) cidadaosGrid.innerHTML = '';
-        if (allCidadaos.length === 0) {
+        if (state.allCidadaos.length === 0) {
             cidadaosGrid.innerHTML = '<p class="text-gray-500 col-span-full text-center">Nenhum cidadão encontrado.</p>';
         } else {
             data.forEach(cidadao => cidadaosGrid.appendChild(buildCidadaoCard(cidadao)));
@@ -474,7 +473,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     async function handleCidadaoFormSubmit(e) {
     e.preventDefault();
-    if (!user) {
+    if (!state.user) {
         showToast("Sessão expirada. Faça login novamente.", "error");
         return;
     }
@@ -487,7 +486,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let photoUrl = cidadaoPhotoUrl.value;
         const file = cidadaoPhotoUpload.files[0];
         if (file) {
-            const filePath = `${user.id}/${Date.now()}_${file.name}`;
+            const filePath = `${state.user.id}/${Date.now()}_${file.name}`;
             const { error: uploadError } = await sb.storage
                 .from('fotos-cidadaos') 
                 .upload(filePath, file);
@@ -542,7 +541,7 @@ document.addEventListener('DOMContentLoaded', () => {
             latitude: lat,
             longitude: long, 
             updated_at: new Date().toISOString(), 
-            user_id: user.id 
+            user_id: state.user.id 
         };
         if (currentEditingId) {
             const { error } = await sb
@@ -568,7 +567,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Atualiza os selects de lideranças se o tipo mudou
         if (cidadaoType.value === 'Liderança') {
             const { data } = await sb.from('cidadaos').select('id, name, type').eq('type', 'Liderança').order('name');
-            if (data) { allLeaders = data; updateLeaderSelects(); }
+            if (data) { state.allLeaders = data; updateLeaderSelects(); }
         }
     } catch (error) {
         console.error(error);
@@ -586,7 +585,7 @@ document.addEventListener('DOMContentLoaded', () => {
 }
     async function handleDemandaFormSubmit(e) {
         e.preventDefault();
-        if (!user) {
+        if (!state.user) {
             showToast("Sessão expirada.", "error");
             return;
         }
@@ -598,7 +597,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 title: document.getElementById('demanda-title').value,
                 description: document.getElementById('demanda-description').value,
                 status: 'pending',
-                user_id: user.id
+                user_id: state.user.id
             };
             const { error } = await sb.from('demandas').insert(demandaData);
             if (error) throw error;
@@ -616,7 +615,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     async function openDemandaDetailsModal(demandaId) {
         viewingDemandaId = demandaId;
-        let demanda = allDemandas.find(d => d.id === demandaId);
+        let demanda = state.allDemandas.find(d => d.id === demandaId);
         if (!demanda) {
             // Não está no cache da página actual — busca do servidor
             const { data } = await sb.from('demandas')
@@ -625,7 +624,7 @@ document.addEventListener('DOMContentLoaded', () => {
             demanda = data;
         }
         if (!demanda) return;
-        const nomeSolicitante = demanda.cidadao ? demanda.cidadao.name : (allCidadaos.find(c => c.id === demanda.cidadao_id)?.name || 'Desconhecido');
+        const nomeSolicitante = demanda.cidadao ? demanda.cidadao.name : (state.allCidadaos.find(c => c.id === demanda.cidadao_id)?.name || 'Desconhecido');
         document.getElementById('details-demanda-title').textContent = demanda.title;
         document.getElementById('details-demanda-cidadao').textContent = `Solicitante: ${nomeSolicitante}`;
         document.getElementById('details-demanda-description').textContent = demanda.description || 'Sem descrição.';
@@ -638,7 +637,7 @@ document.addEventListener('DOMContentLoaded', () => {
         demandaDetailsModal.classList.remove('hidden');
     }
     async function updateDemandaStatus(demandaId, newStatus) {
-        if (!user) return;
+        if (!state.user) return;
         try {
             const { error } = await sb
                 .from('demandas')
@@ -654,16 +653,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     text: `Status alterado para: ${getStatusInfo(newStatus).text}`,
                     author: "Sistema",
                     demanda_id: demandaId,
-                    user_id: user.id
+                    user_id: state.user.id
                 });
             if (noteError) throw noteError;
             showToast("Status atualizado!", "success");
             // PERFORMANCE: atualiza apenas o objeto local da demanda
             // Actualiza o card localmente sem re-fetch (performance)
-            const idx = allDemandas.findIndex(d => d.id === demandaId);
+            const idx = state.allDemandas.findIndex(d => d.id === demandaId);
             if (idx !== -1) {
-                allDemandas[idx].status = newStatus;
-                allDemandas[idx].updated_at = new Date().toISOString();
+                state.allDemandas[idx].status = newStatus;
+                state.allDemandas[idx].updated_at = new Date().toISOString();
                 // Actualiza o badge de status no card já renderizado
                 const cards = allDemandasList?.querySelectorAll('.bg-white');
                 const card = [...(cards||[])].find(el => el._demandaId === demandaId);
@@ -682,7 +681,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     async function loadDemandaNotes(demandaId) {
-        if (!user) return;
+        if (!state.user) return;
         const notesListEl = document.getElementById('demanda-notes-list');
         notesListEl.innerHTML = '<p class="text-sm text-gray-500">A carregar...</p>';
         try {
@@ -711,7 +710,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     async function handleAddNoteSubmit(e) {
         e.preventDefault();
-        if (!user || !viewingDemandaId) return;
+        if (!state.user || !viewingDemandaId) return;
         const newNoteText = document.getElementById('new-note-text');
         const text = newNoteText.value.trim();
         if (!text) return;
@@ -720,9 +719,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 .from('notes')
                 .insert({
                     text: text,
-                    author: user.email || "Utilizador",
+                    author: state.user.email || "Utilizador",
                     demanda_id: viewingDemandaId,
-                    user_id: user.id
+                    user_id: state.user.id
                 });
             if (error) throw error;
             newNoteText.value = ''; 
@@ -734,7 +733,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     async function handleDeleteConfirmation() {
         const { id, type } = itemToDelete;
-        if (!id || !type || !user) return;
+        if (!id || !type || !state.user) return;
         const btn = document.getElementById('confirm-delete-btn');
         btn.disabled = true;
         try {
@@ -756,7 +755,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             // PERFORMANCE: remove do cache local e re-renderiza sem ir ao servidor
             if (type === 'cidadao') {
-                allCidadaos = allCidadaos.filter(c => c.id !== id);
+                state.allCidadaos = state.allCidadaos.filter(c => c.id !== id);
                 await renderCidadaos();
             } else {
                 await loadDemandasPage(true);
@@ -777,7 +776,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const leader = filterLeader.value;
         const sexo = filterSexo.value;
         const faixaEtaria = filterFaixaEtaria.value;
-        const filtered = allCidadaos.filter(cidadao => {
+        const filtered = state.allCidadaos.filter(cidadao => {
             const nameMatch = searchInput.value && cidadao.name.toLowerCase().includes(searchTerm);
             const emailMatch = (cidadao.email || '').toLowerCase().includes(searchTerm);
             const cpfMatch = (cidadao.cpf || '').includes(searchTerm);
@@ -826,7 +825,7 @@ document.addEventListener('DOMContentLoaded', () => {
         card.querySelector('.btn-edit').addEventListener('click', () => openCidadaoModal(cidadao.id));
         card.querySelector('.btn-add-demanda').addEventListener('click', () => openDemandaModal(cidadao.id));
         const deleteBtn = card.querySelector('.btn-delete');
-        if (userRole === 'cadastrador') {
+        if (state.userRole === 'cadastrador') {
             deleteBtn.classList.add('hidden'); // cadastrador não pode excluir
         } else {
             deleteBtn.addEventListener('click', () => requestDelete(cidadao.id, 'cidadao'));
@@ -888,7 +887,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (reset) {
             demandasServerOffset = 0;
-            allDemandas = [];
+            state.allDemandas = [];
             allDemandasList.innerHTML = '<p class="text-gray-400 text-center py-6">A carregar...</p>';
         }
 
@@ -919,7 +918,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Zero correspondências — resultado imediato sem query adicional
                 if (cidadaoIdsFilter.length === 0) {
-                    allDemandas = [];
+                    state.allDemandas = [];
                     if (reset) allDemandasList.innerHTML = '';
                     allDemandasList.innerHTML = '<p class="text-gray-500 text-center py-8">Nenhuma demanda encontrada para este filtro.</p>';
                     const label = document.getElementById('demandas-count-label');
@@ -947,13 +946,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (reset || totalDemandasCount === 0) totalDemandasCount = count || 0;
 
             // Acrescentar ao cache local (só a página corrente)
-            allDemandas = reset ? (data || []) : [...allDemandas, ...(data || [])];
+            state.allDemandas = reset ? (data || []) : [...state.allDemandas, ...(data || [])];
             demandasServerOffset += (data || []).length;
 
             // Renderizar
             if (reset) allDemandasList.innerHTML = '';
 
-            if (allDemandas.length === 0) {
+            if (state.allDemandas.length === 0) {
                 allDemandasList.innerHTML = '<p class="text-gray-500 text-center py-8">Nenhuma demanda encontrada.</p>';
             } else {
                 const fragment = document.createDocumentFragment();
@@ -966,8 +965,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (label) {
                 const temFiltro = demandasSearchState.status || demandasSearchState.leader || demandasSearchState.nome;
                 label.textContent = temFiltro
-                    ? `${allDemandas.length} demanda(s) encontrada(s)`
-                    : `Exibindo ${allDemandas.length} de ${totalDemandasCount} demanda(s)`;
+                    ? `${state.allDemandas.length} demanda(s) encontrada(s)`
+                    : `Exibindo ${state.allDemandas.length} de ${totalDemandasCount} demanda(s)`;
             }
 
             // Botão "Carregar Mais"
@@ -990,7 +989,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!select) return;
             const currentValue = select.value;
             select.innerHTML = '<option value="">Filtrar por Liderança</option>';
-            [...allLeaders].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')).forEach(l => {
+            [...state.allLeaders].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')).forEach(l => {
                 const option = document.createElement('option');
                 option.value = l.id;
                 option.textContent = l.name;
@@ -1010,7 +1009,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (searchInput._autocompleteReady) return;
         searchInput._autocompleteReady = true;
 
-        const sorted = [...allLeaders].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+        const sorted = [...state.allLeaders].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 
         function showDropdown(term) {
             const filtered = term
@@ -1056,7 +1055,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (searchInput._autocompleteReady) return;
         searchInput._autocompleteReady = true;
 
-        const sorted = [...allLeaders].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+        const sorted = [...state.allLeaders].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 
         function showDropdown(term) {
             const filtered = term
@@ -1131,7 +1130,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function updateDashboard() {
         const totalEl = document.getElementById('dashboard-total-cidadaos');
         // Admin vê totais globais; cadastrador vê só os seus (RLS já filtra automaticamente)
-        if (userRole === 'admin' && totalCidadaosCount > 0) {
+        if (state.userRole === 'admin' && totalCidadaosCount > 0) {
             totalEl.textContent = totalCidadaosCount;
         } else {
             const { count } = await sb.from('cidadaos').select('*', { count: 'exact', head: true });
@@ -1320,14 +1319,14 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateDemandasRecentes() {
         const listEl = document.getElementById('demandas-recentes-list');
         if (!listEl) return;
-        const recentes = allDemandas.slice(0, 5);
+        const recentes = state.allDemandas.slice(0, 5);
         listEl.innerHTML = '';
         if (recentes.length === 0) {
             listEl.innerHTML = '<p class="text-sm text-gray-500">Nenhuma demanda recente.</p>';
             return;
         }
         recentes.forEach(d => {
-            const nomeSolicitante = d.cidadao ? d.cidadao.name : (allCidadaos.find(c => c.id === d.cidadao_id)?.name || 'Desconhecido');
+            const nomeSolicitante = d.cidadao ? d.cidadao.name : (state.allCidadaos.find(c => c.id === d.cidadao_id)?.name || 'Desconhecido');
             const statusInfo = getStatusInfo(d.status);
             const item = document.createElement('div');
             item.className = 'p-2 rounded-lg hover:bg-gray-50 border-b last:border-b-0 cursor-pointer';
@@ -1548,7 +1547,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const titleEl = document.getElementById('cidadao-modal-title');
         if (cidadaoId) {
             titleEl.textContent = 'Editar Cidadão';
-            const cidadao = allCidadaos.find(c => c.id === cidadaoId);
+            const cidadao = state.allCidadaos.find(c => c.id === cidadaoId);
             if (cidadao) {
                 cidadaoName.value = cidadao.name || '';
                 cidadaoEmail.value = cidadao.email || '';
@@ -1560,7 +1559,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const leaderSearch = document.getElementById('cidadao-leader-search');
                 if (leaderHidden && leaderSearch) {
                     leaderHidden.value = cidadao.leader || '';
-                    const ldr = allLeaders.find(l => l.id === cidadao.leader);
+                    const ldr = state.allLeaders.find(l => l.id === cidadao.leader);
                     leaderSearch.value = ldr ? ldr.name : '';
                 }
                 cidadaoCPF.value = cidadao.cpf || '';
@@ -1661,7 +1660,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function openDetailsModal(cidadaoId) {
         currentCidadaoIdForDetails = cidadaoId;
         // Tenta achar no cache local primeiro; se não estiver (paginação), busca no servidor
-        let cidadao = allCidadaos.find(c => c.id === cidadaoId);
+        let cidadao = state.allCidadaos.find(c => c.id === cidadaoId);
         if (!cidadao) {
             const { data, error } = await sb
                 .from('cidadaos')
@@ -1697,7 +1696,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('details-sexo').textContent = cidadao.sexo || 'Não Informar';
         document.getElementById('details-profissao').textContent = cidadao.profissao || 'Não informado';
         document.getElementById('details-local-trabalho').textContent = cidadao.localtrabalho || 'Não informado';
-        const leader = allLeaders.find(l => l.id === cidadao.leader);
+        const leader = state.allLeaders.find(l => l.id === cidadao.leader);
         document.getElementById('details-leader').textContent = leader ? leader.name : 'Nenhuma';
         const childrenEl = document.getElementById('details-children');
         const totalFilhos = (cidadao.sons || 0) + (cidadao.daughters || 0);
@@ -1745,7 +1744,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Se veio com um cidadão específico (botão "Demanda" no card), pré-carrega ele
         if (cidadaoId) {
-            const cidadao = allCidadaos.find(c => c.id === cidadaoId);
+            const cidadao = state.allCidadaos.find(c => c.id === cidadaoId);
             if (cidadao) {
                 const opt = document.createElement('option');
                 opt.value = cidadao.id;
@@ -1796,11 +1795,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const title = document.getElementById('confirmation-title');
         const message = document.getElementById('confirmation-message');
         if (type === 'cidadao') {
-            const cidadao = allCidadaos.find(c => c.id === itemId);
+            const cidadao = state.allCidadaos.find(c => c.id === itemId);
             title.textContent = 'Excluir Cidadão';
             message.textContent = `Tem a certeza que quer excluir "${cidadao.name}"?`;
         } else if (type === 'demanda') {
-            const demanda = allDemandas.find(d => d.id === itemId);
+            const demanda = state.allDemandas.find(d => d.id === itemId);
             title.textContent = 'Excluir Demanda';
             message.textContent = `Tem a certeza que quer excluir "${demanda ? demanda.title : 'esta demanda'}"?`;
         }
@@ -2037,7 +2036,7 @@ function closeMapModal() {
             return;
         }
         allUsers.forEach(u => {
-            const isCurrentUser = u.id === user.id;
+            const isCurrentUser = u.id === state.user.id;
             const roleLabel = u.role === 'admin' ? 'Administrador' : 'Cadastrador';
             const roleBadgeColor = u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700';
             const lastLogin = u.last_sign_in
@@ -2248,7 +2247,7 @@ function closeMapModal() {
                     if (data.length >= _LMAX) { _lTruncated = true; break; }
                 }
 
-                const liderNome = allLeaders.find(l => l.id === liderId)?.name || 'Liderança';
+                const liderNome = state.allLeaders.find(l => l.id === liderId)?.name || 'Liderança';
                 if (liderHeader) {
                     liderHeader.innerHTML = `<span class="font-semibold text-blue-800">Liderança: ${liderNome}</span> <span class="text-blue-600 ml-2">${(data||[]).length} cidadão(s) com zona/seção cadastrada</span>${_lTruncated ? ' <span class="text-orange-600 font-semibold ml-2">⚠️ Exibindo os primeiros 5.000 resultados — use filtros para refinar.</span>' : ''}`;
                 }
