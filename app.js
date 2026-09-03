@@ -2,14 +2,21 @@ import { showToast, getInitials, getStatusInfo, formatarData, getFaixaEtaria } f
 import { SUPABASE_URL, SUPABASE_KEY, EDGE_FUNCTION_URL, sb } from './js/config.js';
 import { backupData, renderBackupHistory } from './js/backup.js';
 import { generateExcelReport, exportCoberturaExcel } from './js/reports.js';
+import {
+    initCidadaos, getCidadaosServerSearchState, getTotalCidadaosCount,
+    loadBairrosDistintos, loadCidadaosPage, handleCidadaoFormSubmit,
+    renderCidadaos, renderMoreCidadaos,
+    updateBairroFilter, clearCidadaoFilters,
+    openCidadaoModal, closeCidadaoModal, updateChildrenInputs,
+    handleCEPBlur, openDetailsModal, closeDetailsModal,
+    setupLeaderAutocomplete
+} from './js/cidadaos.js';
 
 import { state } from './js/state.js';
 // state.userRole carregado após login ('admin' ou 'cadastrador')
 let allUsers = []; // lista de utilizadores (só admin)
-// Paginação server-side — controlada por CIDADAOS_PAGE_SIZE e cidadaosServerOffset
-let currentEditingId = null;
+// Paginação server-side de cidadãos — encapsulada em js/cidadaos.js
 let currentCidadaoIdForDemanda = null;
-let currentCidadaoIdForDetails = null;
 let currentEditingDemandaId = null;
 let viewingDemandaId = null;
 let appInitialized = false;
@@ -185,6 +192,14 @@ document.addEventListener('DOMContentLoaded', () => {
             appInitialized = false; 
             return; 
         }
+        // Injeta em cidadaos.js os comportamentos que dependem de outros módulos/app.js,
+        // evitando import circular (app.js já importa de cidadaos.js).
+        initCidadaos({
+            onOpenDemanda: (cidadaoId) => openDemandaModal(cidadaoId),
+            onRequestDelete: (id, type) => requestDelete(id, type),
+            onLeadersChanged: () => updateLeaderSelects(),
+            onOpenMap: (cidadaosToPlot) => openMapModal(cidadaosToPlot)
+        });
         if (logoBtn) {
             logoBtn.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -263,7 +278,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('demandas-load-more-btn')?.addEventListener('click', () => loadDemandasPage(false));
         generateReportBtn.addEventListener('click', generatePrintReport);
         const excelReportBtn = document.getElementById('generate-excel-btn');
-        if (excelReportBtn) excelReportBtn.addEventListener('click', () => generateExcelReport(serverSearchState));
+        if (excelReportBtn) excelReportBtn.addEventListener('click', () => generateExcelReport(getCidadaosServerSearchState()));
         // Cobertura Eleitoral
         document.getElementById('cobertura-load-btn')?.addEventListener('click', loadCoberturaEleitoral);
         // Listeners modal aniversariantes
@@ -309,17 +324,11 @@ document.addEventListener('DOMContentLoaded', () => {
              await sb.auth.signOut(); 
         }
     }
-    // ── PERFORMANCE: controle de estado de busca server-side ──────────────────
-    let serverSearchState = { search: '', type: '', bairro: '', cidade: '', leader: '', sexo: '', faixaEtaria: '', localTrabalho: '' };
-
     // ── Paginação server-side de demandas ─────────────────────────────────
     const DEMANDAS_PAGE_SIZE = 15;
     let demandasServerOffset = 0;
     let totalDemandasCount = 0;
     let demandasSearchState = { status: '', leader: '' };
-    const CIDADAOS_PAGE_SIZE = 12;
-    let totalCidadaosCount = 0;
-    let cidadaosServerOffset = 0;
 
     async function loadInitialData() {
         if (!state.user) return;
@@ -388,202 +397,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    async function loadBairrosDistintos() {
-        try {
-            const { data, error } = await sb
-                .from('cidadaos')
-                .select('bairro')
-                .not('bairro', 'is', null)
-                .order('bairro', { ascending: true });
-            if (error) throw error;
-            const bairrosUnicos = [...new Set(data.map(c => c.bairro).filter(Boolean))];
-            // Guarda para o filtro sem precisar de state.allCidadaos
-            window._bairrosDisponiveis = bairrosUnicos;
-        } catch (e) {
-            console.warn('Não foi possível carregar bairros:', e);
-            window._bairrosDisponiveis = [];
-        }
-    }
-
-    // ── PERFORMANCE: busca paginada no servidor ────────────────────────────────
-    async function loadCidadaosPage(reset = false) {
-        if (!cidadaosGrid) return;
-        if (reset) {
-            cidadaosServerOffset = 0;
-            cidadaosGrid.innerHTML = '';
-            state.allCidadaos = []; // limpa cache local
-        }
-
-        const s = serverSearchState;
-        let query = sb.from('cidadaos').select('*', { count: 'exact' });
-
-        // Filtros aplicados no servidor
-        if (s.search) {
-            query = query.or(`name.ilike.%${s.search}%,email.ilike.%${s.search}%,cpf.ilike.%${s.search}%,voterid.ilike.%${s.search}%`);
-        }
-        if (s.type)    query = query.eq('type', s.type);
-        if (s.bairro)  query = query.eq('bairro', s.bairro);
-        if (s.cidade)  query = query.eq('cidade', s.cidade);
-        if (s.leader)  query = query.eq('leader', s.leader);
-        if (s.sexo)    query = query.eq('sexo', s.sexo);
-        if (s.localTrabalho) query = query.ilike('localtrabalho', `%${s.localTrabalho}%`);
-
-        // Faixa etária: calcula intervalo de datas no servidor
-        if (s.faixaEtaria && s.faixaEtaria !== 'N/A') {
-            const hoje = new Date();
-            const faixas = {
-                '0-17':  [0, 17], '18-25': [18, 25], '26-35': [26, 35],
-                '36-50': [36, 50], '51-65': [51, 65], '66+':   [66, 150]
-            };
-            const [minAge, maxAge] = faixas[s.faixaEtaria] || [0, 150];
-            const maxDate = new Date(hoje); maxDate.setFullYear(hoje.getFullYear() - minAge);
-            const minDate = new Date(hoje); minDate.setFullYear(hoje.getFullYear() - maxAge - 1);
-            query = query.gte('dob', minDate.toISOString().split('T')[0])
-                         .lte('dob', maxDate.toISOString().split('T')[0]);
-        }
-
-        query = query
-            .order('name', { ascending: true })
-            .range(cidadaosServerOffset, cidadaosServerOffset + CIDADAOS_PAGE_SIZE - 1);
-
-        const { data, error, count } = await query;
-        if (error) { console.error(error); showToast('Erro ao carregar cidadãos.', 'error'); return; }
-
-        totalCidadaosCount = count ?? totalCidadaosCount;
-        state.allCidadaos = reset ? data : [...state.allCidadaos, ...data];
-        cidadaosServerOffset += data.length;
-
-        // Renderiza somente o batch novo
-        if (reset) cidadaosGrid.innerHTML = '';
-        if (state.allCidadaos.length === 0) {
-            cidadaosGrid.innerHTML = '<p class="text-gray-500 col-span-full text-center">Nenhum cidadão encontrado.</p>';
-        } else {
-            data.forEach(cidadao => cidadaosGrid.appendChild(buildCidadaoCard(cidadao)));
-        }
-
-        const loadMoreContainer = document.getElementById('load-more-container');
-        if (cidadaosServerOffset < totalCidadaosCount) {
-            loadMoreContainer.classList.remove('hidden');
-        } else {
-            loadMoreContainer.classList.add('hidden');
-        }
-
-        // Atualiza contador no topo
-        const countEl = document.getElementById('cidadaos-count');
-        if (countEl) countEl.textContent = `${totalCidadaosCount} encontrado(s)`;
-    }
-    async function handleCidadaoFormSubmit(e) {
-    e.preventDefault();
-    if (!state.user) {
-        showToast("Sessão expirada. Faça login novamente.", "error");
-        return;
-    }
-    const saveBtn = document.getElementById('save-btn');
-    saveBtn.disabled = true;
-    saveBtn.innerHTML = '<div class="spinner"></div>';
-    const cpf = cidadaoCPF.value.trim() || null;
-    const voterid = cidadaoVoterId.value.trim() || null;
-    try {
-        let photoUrl = cidadaoPhotoUrl.value;
-        const file = cidadaoPhotoUpload.files[0];
-        if (file) {
-            const filePath = `${state.user.id}/${Date.now()}_${file.name}`;
-            const { error: uploadError } = await sb.storage
-                .from('fotos-cidadaos') 
-                .upload(filePath, file);
-            if (uploadError) throw uploadError;
-            const { data } = sb.storage
-                .from('fotos-cidadaos')
-                .getPublicUrl(filePath);
-            photoUrl = data.publicUrl;
-        }
-        let lat = null, long = null;
-        const address = `${cidadaoLogradouro.value}, ${cidadaoBairro.value}, ${cidadaoCidade.value}, ${cidadaoEstado.value}`;
-        if (cidadaoLogradouro.value && cidadaoCidade.value) {
-            try {
-                const response = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`);
-                const data = await response.json();
-                if (data && data.length > 0) {
-                    lat = parseFloat(data[0].lat);
-                    long = parseFloat(data[0].lon);
-                }
-            } catch (geocodeError) {
-                console.error(geocodeError);
-            }
-        }
-        const v = s => s && s.trim() ? s.trim() : null; // helper: vazio → null
-        const cidadaoData = {
-            name: cidadaoName.value.trim(), // único obrigatório
-            email: v(cidadaoEmail.value),
-            dob: cidadaoDob.value || null,
-            sexo: cidadaoSexo.value || null,
-            type: cidadaoType.value || 'Outro',
-            leader: (document.getElementById('cidadao-leader') || cidadaoLeaderSelect)?.value || null,
-            cpf: cpf,
-            rg: v(cidadaoRG.value),
-            voterid: voterid,
-            zona: cidadaoZona ? v(cidadaoZona.value) : null,
-            secao: cidadaoSecao ? v(cidadaoSecao.value) : null,
-            phone: v(cidadaoPhone.value),
-            whatsapp: cidadaoWhatsapp.checked,
-            profissao: v(cidadaoProfissao.value),
-            cep: v(cidadaoCEP.value),
-            logradouro: v(cidadaoLogradouro.value),
-            numero: v(cidadaoNumero.value),
-            complemento: v(cidadaoComplemento.value),
-            bairro: v(cidadaoBairro.value),
-            cidade: v(cidadaoCidade.value),
-            estado: v(cidadaoEstado.value),
-            sons: parseInt(cidadaoSons.value, 10) || 0,
-            daughters: parseInt(cidadaoDaughters.value, 10) || 0,
-            children: getChildrenData(),
-            localtrabalho: v(cidadaoLocalTrabalho.value),
-            photourl: photoUrl || null,
-            latitude: lat,
-            longitude: long, 
-            updated_at: new Date().toISOString(), 
-            user_id: state.user.id 
-        };
-        if (currentEditingId) {
-            const { error } = await sb
-                .from('cidadaos')
-                .update(cidadaoData)
-                .eq('id', currentEditingId);
-            if (error) throw error;
-            showToast("Atualizado com sucesso!", "success");
-        } else {
-            delete cidadaoData.updated_at; 
-            const { error } = await sb
-                .from('cidadaos')
-                .insert(cidadaoData);
-            if (error) throw error;
-            showToast("Adicionado com sucesso!", "success");
-        }
-        closeCidadaoModal();
-        // Recarrega página e lista de bairros em paralelo (pode ter bairro novo)
-        await Promise.all([
-            renderCidadaos(),
-            loadBairrosDistintos().then(() => updateBairroFilter())
-        ]);
-        // Atualiza os selects de lideranças se o tipo mudou
-        if (cidadaoType.value === 'Liderança') {
-            const { data } = await sb.from('cidadaos').select('id, name, type').eq('type', 'Liderança').order('name');
-            if (data) { state.allLeaders = data; updateLeaderSelects(); }
-        }
-    } catch (error) {
-        console.error(error);
-        let msg = "Erro ao salvar.";
-        if (error.message.includes('duplicate key value violates unique constraint "cidadaos_cpf_key"')) {
-            msg = "Este CPF já está cadastrado.";
-        } else if (error.message.includes('duplicate key value violates unique constraint "cidadaos_voterid_key"')) {
-            msg = "Este Título já está cadastrado.";
-        }
-        showToast(msg, "error");
-    } finally {
-        saveBtn.disabled = false;
-        saveBtn.innerHTML = 'Salvar';
-    }
-}
     async function handleDemandaFormSubmit(e) {
         e.preventDefault();
         if (!state.user) {
@@ -770,89 +583,6 @@ document.addEventListener('DOMContentLoaded', () => {
             closeConfirmationModal();
         }
     }
-    function getFilteredCidadaos() {
-        const searchTerm = searchInput.value.toLowerCase();
-        const type = filterType.value;
-        const bairro = filterBairro.value;
-        const leader = filterLeader.value;
-        const sexo = filterSexo.value;
-        const faixaEtaria = filterFaixaEtaria.value;
-        const filtered = state.allCidadaos.filter(cidadao => {
-            const nameMatch = searchInput.value && cidadao.name.toLowerCase().includes(searchTerm);
-            const emailMatch = (cidadao.email || '').toLowerCase().includes(searchTerm);
-            const cpfMatch = (cidadao.cpf || '').includes(searchTerm);
-            const typeMatch = !type || cidadao.type === type;
-            const bairroMatch = !bairro || cidadao.bairro === bairro;
-            const leaderMatch = !leader || cidadao.leader === leader;
-            const sexoMatch = !sexo || (cidadao.sexo || 'Não Informar') === sexo;
-            const ageMatch = !faixaEtaria || getFaixaEtaria(cidadao.dob) === faixaEtaria;
-            const generalMatch = !searchTerm || nameMatch || emailMatch || cpfMatch;
-            return generalMatch && typeMatch && bairroMatch && leaderMatch && sexoMatch && ageMatch;
-        });
-        filtered.sort((a, b) => a.name.localeCompare(b.name));
-        return filtered;
-    }
-    // ── PERFORMANCE: card construído como elemento DOM (sem innerHTML com dados de usuário) ─
-    function buildCidadaoCard(cidadao) {
-        const card = document.createElement('div');
-        card.className = 'bg-white p-5 rounded-lg shadow-md flex flex-col transition-shadow hover:shadow-lg';
-        const initials = getInitials(cidadao.name);
-        const photoUrl = cidadao.photourl;
-        card.innerHTML = `
-            <div class="flex items-center gap-4 mb-4">
-                ${photoUrl
-                    ? `<img src="${photoUrl}" alt="" class="w-16 h-16 rounded-full object-cover bg-gray-200" onerror="this.src='https://placehold.co/100x100/E2E8F0/64748B?text=${encodeURIComponent(initials)}'">`
-                    : `<div class="w-16 h-16 rounded-full bg-blue-500 text-white flex items-center justify-center text-2xl font-bold">${initials}</div>`}
-                <div class="flex-1 min-w-0"><h3 class="text-lg font-bold text-gray-800 truncate"></h3><p class="text-sm text-gray-600 card-type"></p></div>
-            </div>
-            <div class="space-y-2 text-sm text-gray-700 mb-4 flex-1">
-                <p class="flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0 1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg><span class="truncate email-cell"></span></p>
-                <p class="flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg><span class="phone-cell"></span></p>
-                <p class="flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg><span class="bairro-cell"></span></p>
-            </div>
-            <div class="border-t pt-4 flex gap-2">
-                <button class="btn-view-details flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 px-3 rounded-lg text-sm font-medium">Ver Detalhes</button>
-                <button class="btn-edit flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 px-3 rounded-lg text-sm font-medium">Editar</button>
-                <button class="btn-add-demanda bg-purple-500 hover:bg-purple-600 text-white py-2 px-3 rounded-lg text-sm font-medium">Demanda</button>
-                <button class="btn-delete bg-red-500 hover:bg-red-600 text-white py-2 px-3 rounded-lg text-sm font-medium"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
-            </div>`;
-        // textContent para prevenir XSS
-        card.querySelector('h3').textContent = cidadao.name;
-        card.querySelector('.card-type').textContent = cidadao.type;
-        card.querySelector('.email-cell').textContent = cidadao.email || 'N/A';
-        card.querySelector('.phone-cell').textContent = cidadao.phone || 'Não informado';
-        card.querySelector('.bairro-cell').textContent = cidadao.bairro || 'Não informado';
-        card.querySelector('.btn-view-details').addEventListener('click', () => openDetailsModal(cidadao.id));
-        card.querySelector('.btn-edit').addEventListener('click', () => openCidadaoModal(cidadao.id));
-        card.querySelector('.btn-add-demanda').addEventListener('click', () => openDemandaModal(cidadao.id));
-        const deleteBtn = card.querySelector('.btn-delete');
-        if (state.userRole === 'cadastrador') {
-            deleteBtn.classList.add('hidden'); // cadastrador não pode excluir
-        } else {
-            deleteBtn.addEventListener('click', () => requestDelete(cidadao.id, 'cidadao'));
-        }
-        return card;
-    }
-
-    // renderCidadaos dispara busca no servidor com os filtros atuais
-    function renderCidadaos() {
-        serverSearchState = {
-            search:      searchInput.value.toLowerCase().trim(),
-            type:        filterType.value,
-            bairro:      filterBairro.value,
-            cidade:      filterCidade ? filterCidade.value : '',
-            leader:      filterLeader.value,
-            sexo:        filterSexo.value,
-            faixaEtaria: filterFaixaEtaria.value,
-            localTrabalho: filterLocalTrabalho.value.trim()
-        };
-        loadCidadaosPage(true);
-    }
-
-    // "Carregar mais" — próxima página server-side
-    function renderMoreCidadaos() {
-        loadCidadaosPage(false);
-    }
     // Constrói um card de demanda e retorna o elemento
     function buildDemandaCard(demanda) {
         const nomeSolicitante = demanda.cidadao ? demanda.cidadao.name : 'Desconhecido';
@@ -1002,52 +732,6 @@ document.addEventListener('DOMContentLoaded', () => {
         setupLeaderAutocomplete();
     }
 
-    function setupLeaderAutocomplete() {
-        const searchInput = document.getElementById('cidadao-leader-search');
-        const dropdown = document.getElementById('cidadao-leader-dropdown');
-        const hiddenInput = document.getElementById('cidadao-leader');
-        if (!searchInput || !dropdown || !hiddenInput) return;
-        if (searchInput._autocompleteReady) return;
-        searchInput._autocompleteReady = true;
-
-        const sorted = [...state.allLeaders].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
-
-        function showDropdown(term) {
-            const filtered = term
-                ? sorted.filter(l => l.name.toLowerCase().includes(term.toLowerCase()))
-                : sorted;
-            dropdown.innerHTML = '';
-            const none = document.createElement('div');
-            none.className = 'px-3 py-2 cursor-pointer hover:bg-gray-100 text-gray-500 text-sm';
-            none.textContent = 'Nenhuma';
-            none.addEventListener('mousedown', () => {
-                hiddenInput.value = '';
-                searchInput.value = '';
-                dropdown.classList.add('hidden');
-            });
-            dropdown.appendChild(none);
-            filtered.forEach(l => {
-                const item = document.createElement('div');
-                item.className = 'px-3 py-2 cursor-pointer hover:bg-blue-50 text-sm';
-                item.textContent = l.name;
-                item.addEventListener('mousedown', () => {
-                    hiddenInput.value = l.id;
-                    searchInput.value = l.name;
-                    dropdown.classList.add('hidden');
-                });
-                dropdown.appendChild(item);
-            });
-            dropdown.classList.toggle('hidden', filtered.length === 0 && !term);
-        }
-
-        searchInput.addEventListener('input', () => showDropdown(searchInput.value));
-        searchInput.addEventListener('focus', () => showDropdown(searchInput.value));
-        searchInput.addEventListener('blur', () => {
-            setTimeout(() => dropdown.classList.add('hidden'), 150);
-            const match = sorted.find(l => l.name.toLowerCase() === searchInput.value.toLowerCase());
-            if (!match) { hiddenInput.value = ''; searchInput.value = ''; }
-        });
-    }
     function setupCoberturaLiderAutocomplete() {
         const searchInput = document.getElementById('cobertura-lider-search');
         const dropdown    = document.getElementById('cobertura-lider-dropdown');
@@ -1097,31 +781,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function updateBairroFilter() {
-        if (!filterBairro) return;
-        const currentValue = filterBairro.value;
-        // PERFORMANCE: usa lista de bairros carregada uma única vez no servidor
-        const bairros = window._bairrosDisponiveis || [];
-        filterBairro.innerHTML = '<option value="">Filtrar por Bairro</option>';
-        bairros.forEach(bairro => {
-            const option = document.createElement('option');
-            option.value = bairro;
-            option.textContent = bairro;
-            filterBairro.appendChild(option);
-        });
-        filterBairro.value = currentValue;
-    }
-    function clearCidadaoFilters() {
-        searchInput.value = '';
-        filterType.value = '';
-        filterBairro.value = '';
-        if (filterCidade) filterCidade.value = '';
-        filterLeader.value = '';
-        filterSexo.value = '';
-        filterFaixaEtaria.value = '';
-        filterLocalTrabalho.value = '';
-        renderCidadaos();
-    }
     function clearDemandaFilters() {
         demandaFilterStatus.value = '';
         demandaFilterLeader.value = '';
@@ -1131,12 +790,11 @@ document.addEventListener('DOMContentLoaded', () => {
     async function updateDashboard() {
         const totalEl = document.getElementById('dashboard-total-cidadaos');
         // Admin vê totais globais; cadastrador vê só os seus (RLS já filtra automaticamente)
-        if (state.userRole === 'admin' && totalCidadaosCount > 0) {
-            totalEl.textContent = totalCidadaosCount;
+        if (state.userRole === 'admin' && getTotalCidadaosCount() > 0) {
+            totalEl.textContent = getTotalCidadaosCount();
         } else {
             const { count } = await sb.from('cidadaos').select('*', { count: 'exact', head: true });
-            totalCidadaosCount = count || 0;
-            totalEl.textContent = totalCidadaosCount;
+            totalEl.textContent = count || 0;
         }
         // Contador de demandas — busca do servidor para reflectir total real
         try {
@@ -1540,200 +1198,6 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         } catch(e) { console.warn('Chart faixa etária:', e); }
     }
-    async function openCidadaoModal(cidadaoId = null) {
-        currentEditingId = cidadaoId;
-        cidadaoForm.reset();
-        fileNameDisplay.textContent = 'Nenhum ficheiro selecionado';
-        childrenDetailsContainer.innerHTML = '';
-        const titleEl = document.getElementById('cidadao-modal-title');
-        if (cidadaoId) {
-            titleEl.textContent = 'Editar Cidadão';
-            const cidadao = state.allCidadaos.find(c => c.id === cidadaoId);
-            if (cidadao) {
-                cidadaoName.value = cidadao.name || '';
-                cidadaoEmail.value = cidadao.email || '';
-                cidadaoDob.value = cidadao.dob || '';
-                cidadaoSexo.value = cidadao.sexo || 'Não Informar';
-                cidadaoType.value = cidadao.type || 'Outro';
-                // Autocomplete liderança — preenche texto e valor oculto
-                const leaderHidden = document.getElementById('cidadao-leader');
-                const leaderSearch = document.getElementById('cidadao-leader-search');
-                if (leaderHidden && leaderSearch) {
-                    leaderHidden.value = cidadao.leader || '';
-                    const ldr = state.allLeaders.find(l => l.id === cidadao.leader);
-                    leaderSearch.value = ldr ? ldr.name : '';
-                }
-                cidadaoCPF.value = cidadao.cpf || '';
-                cidadaoRG.value = cidadao.rg || '';
-                cidadaoVoterId.value = cidadao.voterid || '';
-                cidadaoPhone.value = cidadao.phone || '';
-                cidadaoWhatsapp.checked = cidadao.whatsapp || false;
-                cidadaoProfissao.value = cidadao.profissao || '';
-                cidadaoLocalTrabalho.value = cidadao.localtrabalho || '';
-                cidadaoPhotoUrl.value = cidadao.photourl || '';
-                cidadaoLat.value = cidadao.latitude || ''; 
-                cidadaoLong.value = cidadao.longitude || ''; 
-                cidadaoCEP.value = cidadao.cep || '';
-                cidadaoLogradouro.value = cidadao.logradouro || '';
-                cidadaoNumero.value = cidadao.numero || '';
-                cidadaoComplemento.value = cidadao.complemento || '';
-                cidadaoBairro.value = cidadao.bairro || '';
-                cidadaoCidade.value = cidadao.cidade || '';
-                cidadaoEstado.value = cidadao.estado || '';
-                cidadaoSons.value = cidadao.sons || 0;
-                cidadaoDaughters.value = cidadao.daughters || 0;
-                updateChildrenInputs('filho', cidadao.children);
-                updateChildrenInputs('filha', cidadao.children);
-            }
-        } else {
-            titleEl.textContent = 'Adicionar Novo Cidadão';
-        }
-        cidadaoModal.classList.remove('hidden');
-        setTimeout(() => { modalContent.classList.remove('scale-95', 'opacity-0'); }, 10);
-    }
-    function closeCidadaoModal() {
-        const leaderSearch = document.getElementById('cidadao-leader-search');
-        const leaderHidden = document.getElementById('cidadao-leader');
-        if (leaderSearch) { leaderSearch.value = ''; leaderSearch._autocompleteReady = false; }
-        if (leaderHidden) leaderHidden.value = '';
-        modalContent.classList.add('scale-95', 'opacity-0');
-        setTimeout(() => { cidadaoModal.classList.add('hidden'); }, 300);
-    }
-    function updateChildrenInputs(type, childrenData = null) {
-        const count = (type === 'filho' ? cidadaoSons.value : cidadaoDaughters.value) || 0;
-        const containerId = type === 'filho' ? 'sons-inputs' : 'daughters-inputs';
-        const label = type === 'filho' ? 'Filho' : 'Filha';
-        let container = document.getElementById(containerId);
-        if (!container) {
-            container = document.createElement('div');
-            container.id = containerId;
-            container.className = 'space-y-3 p-4 bg-gray-50 rounded-lg';
-            childrenDetailsContainer.appendChild(container);
-        }
-        container.innerHTML = '';
-        if (count > 0) {
-            container.innerHTML += `<h4 class="font-medium text-gray-700">${label}s:</h4>`;
-        }
-        for (let i = 0; i < count; i++) {
-            const existingChild = (childrenData || []).find(c => c.type === type && c.index === i);
-            container.innerHTML += `<div class="grid grid-cols-1 md:grid-cols-2 gap-3"><div><label class="block text-xs font-medium text-gray-600">${label} ${i + 1} - Nome</label><input type="text" data-type="${type}" data-index="${i}" data-field="name" class="w-full border border-gray-300 p-2 rounded-lg mt-1" value="${existingChild?.name || ''}"></div><div><label class="block text-xs font-medium text-gray-600">${label} ${i + 1} - Data Nasc.</label><input type="date" data-type="${type}" data-index="${i}" data-field="dob" class="w-full border border-gray-300 p-2 rounded-lg mt-1" value="${existingChild?.dob || ''}"></div></div>`;
-        }
-    }
-    function getChildrenData() {
-        const children = [];
-        const inputs = childrenDetailsContainer.querySelectorAll('input[data-type]');
-        inputs.forEach(input => {
-            const type = input.dataset.type;
-            const index = parseInt(input.dataset.index, 10);
-            const field = input.dataset.field;
-            const value = input.value;
-            let child = children.find(c => c.type === type && c.index === index);
-            if (!child) {
-                child = { type, index };
-                children.push(child);
-            }
-            child[field] = value;
-        });
-        return children.filter(c => c.name && c.dob);
-    }
-    async function handleCEPBlur(e) {
-        const cep = e.target.value.replace(/\D/g, '');
-        if (cep.length === 8) {
-            try {
-                const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
-                if (!response.ok) throw new Error('CEP não encontrado');
-                const data = await response.json();
-                if (data.erro) {
-                    showToast("CEP não encontrado.", "warning");
-                } else {
-                    cidadaoLogradouro.value = data.logradouro;
-                    cidadaoBairro.value = data.bairro;
-                    cidadaoCidade.value = data.localidade;
-                    cidadaoEstado.value = data.uf;
-                    cidadaoNumero.focus();
-                }
-            } catch (error) {
-                console.error(error);
-                showToast("Erro ao consultar o CEP.", "error");
-            }
-        }
-    }
-    async function openDetailsModal(cidadaoId) {
-        currentCidadaoIdForDetails = cidadaoId;
-        // Tenta achar no cache local primeiro; se não estiver (paginação), busca no servidor
-        let cidadao = state.allCidadaos.find(c => c.id === cidadaoId);
-        if (!cidadao) {
-            const { data, error } = await sb
-                .from('cidadaos')
-                .select('*')
-                .eq('id', cidadaoId)
-                .single();
-            if (error || !data) return;
-            cidadao = data;
-        }
-        const detailsModal = document.getElementById('cidadao-details-modal');
-        const content = detailsModal.querySelector('.transform');
-        const photoEl = document.getElementById('details-photo');
-        if (cidadao.photourl) { 
-            photoEl.innerHTML = `<img src="${cidadao.photourl}" alt="${cidadao.name}" class="w-24 h-24 rounded-full object-cover bg-gray-200" onerror="this.src='https://placehold.co/100x100/E2E8F0/64748B?text=${getInitials(cidadao.name)}'">`;
-        } else {
-            photoEl.innerHTML = `<div class="w-24 h-24 rounded-full bg-blue-500 text-white flex items-center justify-center text-4xl font-bold">${getInitials(cidadao.name)}</div>`;
-        }
-        document.getElementById('details-name').textContent = cidadao.name;
-        document.getElementById('details-type').textContent = cidadao.type;
-        document.getElementById('details-email').textContent = cidadao.email || 'Não informado';
-        document.getElementById('details-phone').textContent = cidadao.phone ? `${cidadao.phone} ${cidadao.whatsapp ? '(WhatsApp)' : ''}` : 'Não informado';
-        const addressParts = [cidadao.logradouro, cidadao.numero, cidadao.complemento, cidadao.bairro, cidadao.cidade, cidadao.estado, cidadao.cep].filter(Boolean);
-        document.getElementById('details-address').textContent = addressParts.join(', ') || 'Não informado';
-        document.getElementById('details-cpf').textContent = cidadao.cpf || 'Não informado';
-        document.getElementById('details-rg').textContent = cidadao.rg || 'Não informado';
-        const voterId = cidadao.voterid || '';
-        const zona = cidadao.zona || '';
-        const secao = cidadao.secao || '';
-        let voterText = voterId || 'Não informado';
-        if (zona || secao) voterText += ` | Zona: ${zona || '—'} | Seção: ${secao || '—'}`;
-        document.getElementById('details-voterid').textContent = voterText;
-        document.getElementById('details-dob').textContent = cidadao.dob ? formatarData(cidadao.dob) : 'Não informado';
-        document.getElementById('details-sexo').textContent = cidadao.sexo || 'Não Informar';
-        document.getElementById('details-profissao').textContent = cidadao.profissao || 'Não informado';
-        document.getElementById('details-local-trabalho').textContent = cidadao.localtrabalho || 'Não informado';
-        const leader = state.allLeaders.find(l => l.id === cidadao.leader);
-        document.getElementById('details-leader').textContent = leader ? leader.name : 'Nenhuma';
-        const childrenEl = document.getElementById('details-children');
-        const totalFilhos = (cidadao.sons || 0) + (cidadao.daughters || 0);
-        childrenEl.innerHTML = `<strong>Família:</strong> ${totalFilhos} filho(s)`;
-        if (cidadao.children && cidadao.children.length > 0) {
-            const childrenList = cidadao.children.map(c => `<li class="text-sm ml-4">${c.name} (${formatarData(c.dob)})</li>`).join('');
-            childrenEl.innerHTML += `<ul class="list-disc list-inside">${childrenList}</ul>`;
-        }
-        document.getElementById('details-view-map-btn').onclick = () => {
-            closeDetailsModal();
-            openMapModal([cidadao]);
-        };
-        document.getElementById('details-share-location-btn').onclick = () => shareLocation(cidadao);
-        detailsModal.classList.remove('hidden');
-        setTimeout(() => { content.classList.remove('scale-95', 'opacity-0'); }, 10);
-    }
-    function closeDetailsModal() {
-        const detailsModal = document.getElementById('cidadao-details-modal');
-        const content = detailsModal.querySelector('.transform');
-        content.classList.add('scale-95', 'opacity-0');
-        setTimeout(() => {
-            detailsModal.classList.add('hidden');
-            currentCidadaoIdForDetails = null;
-        }, 300);
-    }
-    function shareLocation(cidadao) {
-        if (!cidadao.logradouro || !cidadao.cidade) {
-            showToast("Endereço incompleto.", "warning");
-            return;
-        }
-        const address = `${cidadao.logradouro}, ${cidadao.numero || 'S/N'}, ${cidadao.bairro}, ${cidadao.cidade}, ${cidadao.estado}`;
-        const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
-        const text = `Olá! Aqui está a localização de ${cidadao.name}:\n${address}\n\nVer no mapa:\n${url}`;
-        const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
-        window.open(whatsappUrl, '_blank');
-    }
     async function openDemandaModal(cidadaoId = null) {
         currentEditingDemandaId = null;
         demandaForm.reset();
@@ -1882,7 +1346,7 @@ function closeMapModal() {
     async function generatePrintReport() {
         // Busca TODOS os cidadãos com os filtros ativos — não apenas a página atual
         showToast("A gerar relatório...", "info");
-        const s = serverSearchState;
+        const s = getCidadaosServerSearchState();
         let query = sb.from('cidadaos').select('name, type, phone, whatsapp, email, logradouro, numero, complemento, bairro, cidade, estado, cep');
         if (s.search)  query = query.or(`name.ilike.%${s.search}%,email.ilike.%${s.search}%,cpf.ilike.%${s.search}%,voterid.ilike.%${s.search}%`);
         if (s.type)    query = query.eq('type', s.type);
