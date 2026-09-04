@@ -518,19 +518,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function updateDashboard() {
         const totalEl = document.getElementById('dashboard-total-cidadaos');
-        // Admin vê totais globais; cadastrador vê só os seus (RLS já filtra automaticamente)
-        if (state.userRole === 'admin' && getTotalCidadaosCount() > 0) {
-            totalEl.textContent = getTotalCidadaosCount();
-        } else {
-            const { count } = await sb.from('cidadaos').select('*', { count: 'exact', head: true });
-            totalEl.textContent = count || 0;
-        }
-        // Contador de demandas — busca do servidor para reflectir total real
-        try {
-            const { count: cntDemandas } = await sb
-                .from('demandas').select('*', { count: 'exact', head: true });
-            document.getElementById('dashboard-total-demandas').textContent = cntDemandas || 0;
-        } catch(e) { /* mantém o valor anterior */ }
+        // As duas contagens (cidadãos/demandas) em paralelo — nenhuma depende da outra
+        await Promise.all([
+            (async () => {
+                // Admin vê totais globais; cadastrador vê só os seus (RLS já filtra automaticamente)
+                if (state.userRole === 'admin' && getTotalCidadaosCount() > 0) {
+                    totalEl.textContent = getTotalCidadaosCount();
+                } else {
+                    const { count } = await sb.from('cidadaos').select('*', { count: 'exact', head: true });
+                    totalEl.textContent = count || 0;
+                }
+            })(),
+            (async () => {
+                // Contador de demandas — busca do servidor para reflectir total real
+                try {
+                    const { count: cntDemandas } = await sb
+                        .from('demandas').select('*', { count: 'exact', head: true });
+                    document.getElementById('dashboard-total-demandas').textContent = cntDemandas || 0;
+                } catch(e) { /* mantém o valor anterior */ }
+            })()
+        ]);
         // Gráficos e widgets em paralelo — não dependem uns dos outros
         updateDemandasRecentes();
         updateCidadaosPorTipoChart();
@@ -538,7 +545,6 @@ document.addEventListener('DOMContentLoaded', () => {
         await Promise.all([
             updateAniversariantes(),
             updateCidadaosPorBairroChart(),
-            updateCidadaosPorMunicipioChart(),
             updateCidadaosPorMunicipioChart(),
             updateCidadaosPorSexoChart(),
             updateCidadaosPorFaixaEtariaChart()
@@ -820,39 +826,6 @@ document.addEventListener('DOMContentLoaded', () => {
                                 }
                             }
                         }
-                    }
-                }
-            });
-        } catch(e) { console.warn('Chart município:', e); }
-    }
-
-    async function updateCidadaosPorMunicipioChart() {
-        const ctx = document.getElementById('cidadaos-por-municipio-chart');
-        if (!ctx) return;
-        try {
-            const { data, error } = await sb.from('cidadaos').select('cidade');
-            if (error) throw error;
-            const contagem = (data || []).reduce((acc, c) => {
-                const cidade = c.cidade || 'Não Informado';
-                acc[cidade] = (acc[cidade] || 0) + 1;
-                return acc;
-            }, {});
-            const sorted = Object.entries(contagem).sort((a, b) => b[1] - a[1]);
-            const labels = sorted.map(([k]) => k);
-            const values = sorted.map(([, v]) => v);
-            const colors = ['#3B82F6','#10B981','#F59E0B','#EF4444','#8B5CF6','#06B6D4','#84CC16','#F97316'];
-            if (cidadaosMunicipioChart) cidadaosMunicipioChart.destroy();
-            cidadaosMunicipioChart = new Chart(ctx, {
-                type: 'doughnut',
-                data: { labels, datasets: [{ data: values, backgroundColor: colors.slice(0, labels.length) }] },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: {
-                        legend: { position: 'bottom' },
-                        tooltip: { callbacks: { label: (c) => {
-                            const total = c.dataset.data.reduce((a, b) => a + b, 0);
-                            return ` ${c.label}: ${c.parsed} (${((c.parsed/total)*100).toFixed(1)}%)`;
-                        }}}
                     }
                 }
             });
