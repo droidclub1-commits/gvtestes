@@ -415,6 +415,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (error) throw error;
                 showToast("Cidadão excluído.", "success");
             } else if (type === 'demanda') {
+                 // Apaga as notas vinculadas primeiro — evita erro de FK constraint
+                 // caso a coluna notes.demanda_id não tenha ON DELETE CASCADE no banco.
+                 const { error: notesError } = await sb
+                    .from('notes')
+                    .delete()
+                    .eq('demanda_id', id);
+                 if (notesError) throw notesError;
                  const { error } = await sb
                     .from('demandas')
                     .delete()
