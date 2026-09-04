@@ -193,6 +193,7 @@ export function buildDemandaCard(demanda) {
     const nomeSolicitante = demanda.cidadao ? demanda.cidadao.name : 'Desconhecido';
     const statusInfo = getStatusInfo(demanda.status);
     const item = document.createElement('div');
+    item._demandaId = demanda.id; // usado por updateDemandaStatus para achar o card e atualizar o selo sem reload
     item.className = 'bg-white p-4 rounded-lg shadow-sm border flex justify-between items-center cursor-pointer hover:shadow-md transition-shadow';
     const titleEl = document.createElement('h3');
     titleEl.className = 'text-lg font-semibold text-gray-800';
