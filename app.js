@@ -25,6 +25,7 @@ import {
     getCoberturaData, setupCoberturaLiderAutocomplete,
     clearCoberturaFiltros, loadCoberturaEleitoral
 } from './js/cobertura.js';
+import { openMapModal, closeMapModal } from './js/map.js';
 
 import { state } from './js/state.js';
 // state.userRole carregado após login ('admin' ou 'cadastrador')
@@ -36,7 +37,7 @@ let logoBtn, logoutBtn, sidebarNav, addCidadaoBtn, addDemandaGeralBtn,
     closeModalBtn, cancelBtn, saveBtn, closeDetailsModalBtn, closeDemandaModalBtn,
     cancelDemandaBtn, closeDemandaDetailsBtn, closeMapBtn, cidadaoModal,
     modalContent, cidadaoDetailsModal, demandaModal, demandaDetailsModal,
-    mapModal, confirmationModal, cidadaoForm, demandaForm, addNoteForm,
+    confirmationModal, cidadaoForm, demandaForm, addNoteForm,
     searchInput, filterType, filterBairro, filterCidade, filterLeader, filterSexo,
     filterFaixaEtaria, filterLocalTrabalho, clearFiltersBtn, generateReportBtn, viewMapBtn,
     demandaFilterStatus, demandaFilterLeader, demandaSearchNome, demandaClearFiltersBtn,
@@ -50,7 +51,7 @@ let logoBtn, logoutBtn, sidebarNav, addCidadaoBtn, addDemandaGeralBtn,
     childrenDetailsContainer, cidadaoPhotoUrl, cidadaoPhotoUpload, fileNameDisplay,
     loadMoreBtn, cidadaoLat, cidadaoLong,
     itemToDelete = { id: null, type: null }, 
-    map = null, markers = [], cidadaosChart = null, demandasChart = null, 
+    cidadaosChart = null, demandasChart = null, 
     cidadaosBairroChart = null, cidadaosSexoChart = null, cidadaosFaixaEtariaChart = null, cidadaosMunicipioChart = null; 
 document.addEventListener('DOMContentLoaded', () => {
     const loginPage = document.getElementById('login-page');
@@ -142,7 +143,6 @@ document.addEventListener('DOMContentLoaded', () => {
         cidadaoDetailsModal = document.getElementById('cidadao-details-modal');
         demandaModal = document.getElementById('demanda-modal');
         demandaDetailsModal = document.getElementById('demanda-details-modal');
-        mapModal = document.getElementById('map-modal');
         confirmationModal = document.getElementById('confirmation-modal');
         cidadaoForm = document.getElementById('cidadao-form');
         demandaForm = document.getElementById('demanda-form');
@@ -877,75 +877,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('confirmation-modal').classList.add('hidden');
         itemToDelete = { id: null, type: null };
     }
-    function initializeMap() {
-    if (map) { map.remove(); }
-    map = L.map('map').setView([-0.03964, -51.18182], 13); 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-    }).addTo(map);
-    markers = [];
-}
-async function openMapModal(cidadaosToPlot = null) {
-    mapModal.classList.remove('hidden');
-    if (!map) {
-        initializeMap();
-        await new Promise(resolve => setTimeout(resolve, 200));
-    } else {
-        markers.forEach(m => { try { m.remove(); } catch(e) {} });
-        markers = [];
-        // Remove cluster anterior se existir
-        if (map._clusterGroup) { map.removeLayer(map._clusterGroup); map._clusterGroup = null; }
-    }
-    if (map) map.invalidateSize();
-
-    // PERFORMANCE: se não recebeu lista específica, busca só cidadãos com coordenadas do servidor
-    let cidadaos = cidadaosToPlot;
-    if (!cidadaos) {
-        const { data } = await sb
-            .from('cidadaos')
-            .select('id, name, type, latitude, longitude, logradouro, numero')
-            .not('latitude', 'is', null)
-            .not('longitude', 'is', null)
-            .limit(5000); // limite razoável para o mapa
-        cidadaos = data || [];
-    }
-
-    const bounds = [];
-    // PERFORMANCE: usa MarkerClusterGroup se disponível, senão marcadores normais
-    const useCluster = typeof L.markerClusterGroup === 'function';
-    const clusterGroup = useCluster ? L.markerClusterGroup({ chunkedLoading: true }) : null;
-    if (clusterGroup) { map._clusterGroup = clusterGroup; }
-
-    for (const cidadao of cidadaos) {
-        if (cidadao.latitude && cidadao.longitude) {
-            try {
-                const latLng = [parseFloat(cidadao.latitude), parseFloat(cidadao.longitude)];
-                const marker = L.marker(latLng);
-                const popupEl = document.createElement('div');
-                const nameEl = document.createElement('strong');
-                nameEl.textContent = cidadao.name;
-                const typeEl = document.createElement('span');
-                typeEl.textContent = ' — ' + cidadao.type;
-                popupEl.appendChild(nameEl);
-                popupEl.appendChild(typeEl);
-                marker.bindPopup(popupEl);
-                if (clusterGroup) { clusterGroup.addLayer(marker); } else { marker.addTo(map); }
-                markers.push(marker);
-                bounds.push(latLng);
-            } catch (error) { console.warn(error); }
-        }
-    }
-    if (clusterGroup) map.addLayer(clusterGroup);
-
-    if (bounds.length > 0) {
-        map.fitBounds(bounds, { padding: [50, 50] });
-    } else {
-        map.setView([-0.03964, -51.18182], 13);
-    }
-}
-function closeMapModal() {
-    mapModal.classList.add('hidden');
-}
     async function generatePrintReport() {
         // Busca TODOS os cidadãos com os filtros ativos — não apenas a página atual
         showToast("A gerar relatório...", "info");
