@@ -294,7 +294,7 @@ export function buildCidadaoCard(cidadao) {
     card.innerHTML = `
         <div class="flex items-center gap-4 mb-4">
             ${photoUrl
-                ? `<img src="${photoUrl}" alt="" class="w-16 h-16 rounded-full object-cover bg-gray-200" onerror="this.src='https://placehold.co/100x100/E2E8F0/64748B?text=${encodeURIComponent(initials)}'">`
+                ? `<img src="${photoUrl}" alt="" loading="lazy" class="w-16 h-16 rounded-full object-cover bg-gray-200" onerror="this.src='https://placehold.co/100x100/E2E8F0/64748B?text=${encodeURIComponent(initials)}'">`
                 : `<div class="w-16 h-16 rounded-full bg-blue-500 text-white flex items-center justify-center text-2xl font-bold">${initials}</div>`}
             <div class="flex-1 min-w-0"><h3 class="text-lg font-bold text-gray-800 truncate"></h3><p class="text-sm text-gray-600 card-type"></p></div>
         </div>
