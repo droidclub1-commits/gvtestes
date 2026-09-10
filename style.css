@@ -44,3 +44,19 @@ input:focus, select:focus, textarea:focus { border-color: var(--gc-blue); ring: 
 .focus\:ring-indigo-500:focus, .focus\:ring-blue-500:focus { --tw-ring-color: var(--gc-blue) !important; }
 .focus\:border-indigo-500:focus, .focus\:border-blue-500:focus { border-color: var(--gc-blue) !important; }
 .bg-blue-100 { background-color: #E4EAF4 !important; }
+
+/* ── Navegação mobile (barra inferior + painel "Mais") ──────────────
+   Extraído/adicionado durante o passe de responsividade mobile.  */
+@media (max-width: 767px) {
+    /* Espaço extra no fim do conteúdo rolável para não ficar atrás da
+       barra inferior fixa (~64px + safe-area do iOS) */
+    .page .overflow-y-auto { padding-bottom: 6rem !important; }
+    /* Cabeçalhos e formulários com menos respiro em telas pequenas */
+    .page > header.p-6, .page > header.bg-white.p-6 { padding: 1rem !important; }
+    /* Modais com menos padding interno — mais espaço útil na tela pequena */
+    .fixed.inset-0 > div.p-8 { padding: 1rem !important; }
+    /* Cabeçalhos com título + botões de ação: empilha em vez de estourar a largura */
+    .page header .flex.justify-between.items-center.gap-4 { flex-direction: column; align-items: stretch; gap: 0.75rem; }
+    .page header .flex.items-center.gap-4 { flex-wrap: wrap; }
+}
+#mobile-tabbar .tab-link.active { color: var(--gc-gold); }
