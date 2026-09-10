@@ -1,162 +1,180 @@
-// ═══════════════════════════════════════════════════════════════
-// CONFIGURAÇÃO
-// ═══════════════════════════════════════════════════════════════
-// Mesma URL e anon key públicas usadas em app.js — não são segredo,
-// a proteção real é a senha verificada no servidor (Edge Function).
-const SUPABASE_URL = 'https://gccxghayghuqrwdmtwnn.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdjY3hnaGF5Z2h1cXJ3ZG10d25uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0MzA3NDcsImV4cCI6MjEwMzAwNjc0N30.kUaWnK6Wx-M6Y3BGZM1JYo0a80DF-tNPCsxvZN054CM';
-const FUNCTION_URL = `${SUPABASE_URL}/functions/v1/public-cadastro`;
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestor Cidadão — Cadastro Rápido</title>
+    <link rel="icon" type="image/x-icon" href="favicon/favicon.ico">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon/favicon-16x16.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="favicon/android-chrome-192x192.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="favicon/apple-touch-icon.png">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+    <!-- reaproveita o mesmo style.css do sistema principal (cores sky/slate + spinner) -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="bg-slate-100">
+    <div id="toast-container" class="fixed top-5 right-5 z-[1000] space-y-2"></div>
 
-// Senha fica só na memória desta aba — nunca é salva em localStorage
-// nem escrita neste arquivo. Some ao recarregar a página.
-let accessPassword = null;
+    <!-- ── Portão de senha ─────────────────────────────────────────── -->
+    <div id="gate-page" class="flex flex-col items-center justify-center h-screen bg-gray-200 px-4">
+        <div class="w-full max-w-md p-8 space-y-8 bg-white rounded-lg shadow-md">
+            <div class="text-center">
+                <div class="mx-auto w-16 h-16">
+<svg viewBox="0 0 40 40" class="w-full h-full" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <linearGradient id="gcLogoGradPubLogin" x1="0" y1="0" x2="1" y2="1">
+                                <stop offset="0%" stop-color="#0C3E85"/>
+                                <stop offset="100%" stop-color="#00A86B"/>
+                            </linearGradient>
+                            <clipPath id="gcLogoClipPubLogin"><rect x="0" y="0" width="40" height="40" rx="10"/></clipPath>
+                        </defs>
+                        <rect x="0" y="0" width="40" height="40" rx="10" fill="url(#gcLogoGradPubLogin)"/>
+                        <g clip-path="url(#gcLogoClipPubLogin)">
+                            <circle cx="20" cy="15" r="6" fill="#FFFFFF"/>
+                            <path d="M7 34c0-7.5 5.5-12 13-12s13 4.5 13 12" fill="#FFFFFF"/>
+                        </g>
+                        <circle cx="30" cy="30" r="8" fill="#FFB300" stroke="#FFFFFF" stroke-width="1.5"/>
+                        <path d="M26.7 30.2l2.2 2.2 4.1-4.5" stroke="#0C3E85" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <h2 class="mt-6 text-2xl font-bold text-gray-900">Cadastro Rápido</h2>
+                <p class="mt-2 text-sm text-gray-600">Digite a chave de acesso para cadastrar um cidadão.</p>
+            </div>
+            <form id="gate-form" class="mt-8 space-y-4">
+                <div>
+                    <label for="gate-password" class="sr-only">Chave de acesso</label>
+                    <input id="gate-password" type="password" required autocomplete="off"
+                        class="appearance-none block w-full px-3 py-3 border border-gray-300 rounded-md placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        placeholder="Chave de acesso">
+                </div>
+                <button type="submit" id="gate-btn"
+                    class="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    Entrar
+                </button>
+            </form>
+        </div>
+        <p class="mt-8 text-xs text-gray-500 font-medium">GESTOR CIDADÃO© — cadastro público</p>
+    </div>
 
-function showToast(message, type = 'success') {
-    const container = document.getElementById('toast-container');
-    const toast = document.createElement('div');
-    const bg = type === 'error' ? 'bg-red-600' : 'bg-green-600';
-    toast.className = `${bg} text-white px-4 py-3 rounded-lg shadow-lg text-sm font-medium`;
-    toast.textContent = message; // textContent — nunca innerHTML com dados externos
-    container.appendChild(toast);
-    setTimeout(() => toast.remove(), 4000);
-}
+    <!-- ── Formulário de cadastro (só aparece após a senha certa) ────── -->
+    <div id="form-page" class="hidden min-h-screen py-8 px-4">
+        <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6 md:p-8">
+            <div class="text-center mb-6">
+                <div class="mx-auto w-12 h-12 mb-3">
+<svg viewBox="0 0 40 40" class="w-full h-full" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <linearGradient id="gcLogoGradPubHeader" x1="0" y1="0" x2="1" y2="1">
+                                <stop offset="0%" stop-color="#0C3E85"/>
+                                <stop offset="100%" stop-color="#00A86B"/>
+                            </linearGradient>
+                            <clipPath id="gcLogoClipPubHeader"><rect x="0" y="0" width="40" height="40" rx="10"/></clipPath>
+                        </defs>
+                        <rect x="0" y="0" width="40" height="40" rx="10" fill="url(#gcLogoGradPubHeader)"/>
+                        <g clip-path="url(#gcLogoClipPubHeader)">
+                            <circle cx="20" cy="15" r="6" fill="#FFFFFF"/>
+                            <path d="M7 34c0-7.5 5.5-12 13-12s13 4.5 13 12" fill="#FFFFFF"/>
+                        </g>
+                        <circle cx="30" cy="30" r="8" fill="#FFB300" stroke="#FFFFFF" stroke-width="1.5"/>
+                        <path d="M26.7 30.2l2.2 2.2 4.1-4.5" stroke="#0C3E85" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <h1 class="text-xl font-bold text-gray-800">Cadastro de Cidadão</h1>
+                <p class="text-sm text-gray-600">Preencha os dados abaixo. Você pode cadastrar quantas pessoas quiser nesta sessão.</p>
+            </div>
 
-// ── Máscaras de preenchimento (mesma lógica do app principal) ──
-function applyMask(id, mask) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.addEventListener('input', function () {
-        let v = this.value.replace(/\D/g, '');
-        let out = '', vi = 0;
-        for (let mi = 0; mi < mask.length && vi < v.length; mi++) {
-            if (mask[mi] === '9') { out += v[vi++]; }
-            else { out += mask[mi]; if (v[vi] === mask[mi]) vi++; }
-        }
-        this.value = out;
-    });
-}
+            <form id="cidadao-form-public" class="space-y-6">
+                <!-- honeypot anti-bot: campo escondido que humanos nunca preenchem -->
+                <div class="hidden" aria-hidden="true">
+                    <label for="website">Não preencher</label>
+                    <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+                </div>
 
-function resetFormPageState() {
-    accessPassword = null;
-    document.getElementById('form-page').classList.add('hidden');
-    document.getElementById('gate-page').classList.remove('hidden');
-}
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="space-y-4">
+                        <h3 class="text-sm font-semibold text-gray-800 border-b pb-2 uppercase tracking-wide">Dados Pessoais</h3>
+                        <div>
+                            <label for="c-name" class="block text-sm font-medium text-gray-700 mb-1">Nome Completo *</label>
+                            <input type="text" id="c-name" required class="w-full border border-gray-300 p-2 rounded-lg">
+                        </div>
+                        <div>
+                            <label for="c-cpf" class="block text-sm font-medium text-gray-700 mb-1">CPF</label>
+                            <input type="text" id="c-cpf" class="w-full border border-gray-300 p-2 rounded-lg" placeholder="000.000.000-00">
+                        </div>
+                        <div>
+                            <label for="c-dob" class="block text-sm font-medium text-gray-700 mb-1">Data de Nascimento</label>
+                            <input type="date" id="c-dob" class="w-full border border-gray-300 p-2 rounded-lg">
+                        </div>
+                    </div>
 
-async function callFunction(payload) {
-    const res = await fetch(FUNCTION_URL, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'apikey': SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-        },
-        body: JSON.stringify(payload)
-    });
-    let json;
-    try { json = await res.json(); } catch (_) { json = {}; }
-    return { ok: res.ok && json.ok, status: res.status, data: json };
-}
+                    <div class="space-y-4">
+                        <h3 class="text-sm font-semibold text-gray-800 border-b pb-2 uppercase tracking-wide">Contato e Perfil</h3>
+                        <div>
+                            <label for="c-phone" class="block text-sm font-medium text-gray-700 mb-1">Telefone</label>
+                            <div class="flex items-center">
+                                <input type="tel" id="c-phone" class="w-full border border-gray-300 p-2 rounded-l-lg" placeholder="(00) 00000-0000">
+                                <div class="flex items-center pl-3 pr-2 border-t border-b border-r rounded-r-lg h-full">
+                                    <input id="c-whatsapp" type="checkbox" class="h-4 w-4 text-green-600 border-gray-300 rounded">
+                                    <label for="c-whatsapp" class="ml-2 text-sm text-gray-600">WhatsApp</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <label for="c-sexo" class="block text-sm font-medium text-gray-700 mb-1">Sexo</label>
+                            <select id="c-sexo" class="w-full border border-gray-300 p-2 rounded-lg bg-white">
+                                <option value="Não Informar">Não Informar</option>
+                                <option value="Masculino">Masculino</option>
+                                <option value="Feminino">Feminino</option>
+                                <option value="Outro">Outro</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="c-type" class="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+                            <select id="c-type" class="w-full border border-gray-300 p-2 rounded-lg bg-white">
+                                <option value="">-- Selecione --</option>
+                                <option value="Apoiador">Apoiador</option>
+                                <option value="Eleitor">Eleitor</option>
+                                <option value="Outro">Outro</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
 
-document.addEventListener('DOMContentLoaded', () => {
-    applyMask('c-cpf', '999.999.999-99');
-    applyMask('c-phone', '(99) 99999-9999');
-    applyMask('c-cep', '99999-999');
+                <div>
+                    <h3 class="text-sm font-semibold text-gray-800 border-b pb-2 uppercase tracking-wide mb-4">Endereço</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div><label for="c-cep" class="block text-sm font-medium text-gray-700 mb-1">CEP</label><input type="text" id="c-cep" class="w-full border border-gray-300 p-2 rounded-lg" placeholder="00000-000"></div>
+                        <div class="md:col-span-2"><label for="c-logradouro" class="block text-sm font-medium text-gray-700 mb-1">Logradouro</label><input type="text" id="c-logradouro" class="w-full border border-gray-300 p-2 rounded-lg"></div>
+                        <div><label for="c-numero" class="block text-sm font-medium text-gray-700 mb-1">Nº</label><input type="text" id="c-numero" class="w-full border border-gray-300 p-2 rounded-lg"></div>
+                        <div class="md:col-span-2"><label for="c-complemento" class="block text-sm font-medium text-gray-700 mb-1">Complemento</label><input type="text" id="c-complemento" class="w-full border border-gray-300 p-2 rounded-lg"></div>
+                        <div><label for="c-bairro" class="block text-sm font-medium text-gray-700 mb-1">Bairro</label><input type="text" id="c-bairro" class="w-full border border-gray-300 p-2 rounded-lg"></div>
+                        <div><label for="c-cidade" class="block text-sm font-medium text-gray-700 mb-1">Cidade</label><input type="text" id="c-cidade" class="w-full border border-gray-300 p-2 rounded-lg"></div>
+                        <div><label for="c-estado" class="block text-sm font-medium text-gray-700 mb-1">UF</label><input type="text" id="c-estado" maxlength="2" class="w-full border border-gray-300 p-2 rounded-lg"></div>
+                    </div>
+                </div>
 
-    const gatePage = document.getElementById('gate-page');
-    const formPage = document.getElementById('form-page');
-    const gateForm = document.getElementById('gate-form');
-    const gateBtn = document.getElementById('gate-btn');
-    const gatePassword = document.getElementById('gate-password');
-    const cidadaoForm = document.getElementById('cidadao-form-public');
-    const saveBtn = document.getElementById('save-btn-public');
+                <div>
+                    <label for="c-indicadopor" class="block text-sm font-medium text-gray-700 mb-1">Indicado por</label>
+                    <input type="text" id="c-indicadopor" class="w-full border border-gray-300 p-2 rounded-lg" placeholder="Ex: Sd Fulano">
+                    <p class="text-xs text-gray-500 mt-1">Essa informação será salva junto ao campo Complemento do endereço.</p>
+                </div>
 
-    gateForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        gateBtn.disabled = true;
-        gateBtn.innerHTML = '<div class="spinner"></div>';
-        try {
-            const { ok, status, data } = await callFunction({ action: 'verify', password: gatePassword.value });
-            if (!ok) {
-                if (status === 401) showToast('Chave de acesso incorreta.', 'error');
-                else showToast(data.error || 'Erro ao verificar a chave.', 'error');
-                return;
-            }
-            accessPassword = gatePassword.value;
-            gatePassword.value = '';
-            gatePage.classList.add('hidden');
-            formPage.classList.remove('hidden');
-        } catch (err) {
-            console.error(err);
-            showToast('Erro de conexão. Tente novamente.', 'error');
-        } finally {
-            gateBtn.disabled = false;
-            gateBtn.innerHTML = 'Entrar';
-        }
-    });
+                <div>
+                    <label for="c-escola" class="block text-sm font-medium text-gray-700 mb-1">Escola</label>
+                    <input type="text" id="c-escola" class="w-full border border-gray-300 p-2 rounded-lg">
+                </div>
 
-    cidadaoForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const v = s => (s && s.trim()) ? s.trim() : null;
-        const name = document.getElementById('c-name').value.trim();
-        if (!name) {
-            showToast('O nome é obrigatório.', 'error');
-            return;
-        }
-        saveBtn.disabled = true;
-        saveBtn.innerHTML = '<div class="spinner"></div>';
+                <div class="flex justify-end pt-4 border-t">
+                    <button type="submit" id="save-btn-public"
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg flex items-center justify-center gap-2">
+                        Cadastrar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 
-        // "Indicado por" não tem coluna própria no banco — é anexado ao
-        // campo Complemento do endereço como observação de texto.
-        const complementoBase = v(document.getElementById('c-complemento').value);
-        const indicadoPor = v(document.getElementById('c-indicadopor').value);
-        let complementoFinal = complementoBase;
-        if (indicadoPor) {
-            complementoFinal = complementoBase
-                ? `${complementoBase} | Indicado por: ${indicadoPor}`
-                : `Indicado por: ${indicadoPor}`;
-        }
-
-        const payload = {
-            action: 'create',
-            password: accessPassword,
-            honeypot: document.getElementById('website').value,
-            cidadao: {
-                name,
-                dob: document.getElementById('c-dob').value || null,
-                sexo: document.getElementById('c-sexo').value || null,
-                type: document.getElementById('c-type').value || 'Outro',
-                cpf: v(document.getElementById('c-cpf').value),
-                localtrabalho: v(document.getElementById('c-escola').value),
-                phone: v(document.getElementById('c-phone').value),
-                whatsapp: document.getElementById('c-whatsapp').checked,
-                cep: v(document.getElementById('c-cep').value),
-                logradouro: v(document.getElementById('c-logradouro').value),
-                numero: v(document.getElementById('c-numero').value),
-                complemento: complementoFinal,
-                bairro: v(document.getElementById('c-bairro').value),
-                cidade: v(document.getElementById('c-cidade').value),
-                estado: v(document.getElementById('c-estado').value)
-            }
-        };
-        try {
-            const { ok, status, data } = await callFunction(payload);
-            if (!ok) {
-                if (status === 401) {
-                    showToast('Sua sessão expirou. Digite a chave novamente.', 'error');
-                    resetFormPageState();
-                    return;
-                }
-                throw new Error(data.error || 'Erro ao cadastrar.');
-            }
-            showToast('Cidadão cadastrado com sucesso!', 'success');
-            cidadaoForm.reset();
-            document.getElementById('c-name').focus();
-        } catch (err) {
-            console.error(err);
-            showToast(err.message || 'Erro ao cadastrar. Tente novamente.', 'error');
-        } finally {
-            saveBtn.disabled = false;
-            saveBtn.innerHTML = 'Cadastrar';
-        }
-    });
-});
+    <script src="cadastro-publico.js"></script>
+</body>
+</html>
