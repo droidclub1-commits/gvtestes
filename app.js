@@ -38,6 +38,7 @@ import { state } from './js/state.js';
 let appInitialized = false;
 let _initLock = false;
 let logoBtn, logoutBtn, sidebarNav, addCidadaoBtn, addDemandaGeralBtn,
+    mobileTabbar, maisPanel, maisPanelContent, tabbarMaisBtn, maisLogoutBtn,
     closeModalBtn, cancelBtn, saveBtn, closeDetailsModalBtn, closeDemandaModalBtn,
     cancelDemandaBtn, closeDemandaDetailsBtn, closeMapBtn, cidadaoModal,
     modalContent, cidadaoDetailsModal, demandaModal, demandaDetailsModal,
@@ -130,6 +131,11 @@ document.addEventListener('DOMContentLoaded', () => {
         logoBtn = document.getElementById('logo-btn'); 
         logoutBtn = document.getElementById('logout-btn');
         sidebarNav = document.getElementById('sidebar-nav');
+        mobileTabbar = document.getElementById('mobile-tabbar');
+        maisPanel = document.getElementById('mais-panel');
+        maisPanelContent = document.getElementById('mais-panel-content');
+        tabbarMaisBtn = document.getElementById('tabbar-mais-btn');
+        maisLogoutBtn = document.getElementById('mais-logout-btn');
         addCidadaoBtn = document.getElementById('add-cidadao-btn');
         addDemandaGeralBtn = document.getElementById('add-demanda-geral-btn');
         closeModalBtn = document.getElementById('close-modal-btn');
@@ -252,6 +258,38 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         });
+        // ── Navegação mobile (barra inferior + painel "Mais") ──────────
+        function openMaisPanel() {
+            maisPanel.classList.remove('hidden');
+            setTimeout(() => maisPanelContent.classList.remove('translate-y-full'), 10);
+        }
+        function closeMaisPanel() {
+            maisPanelContent.classList.add('translate-y-full');
+            setTimeout(() => maisPanel.classList.add('hidden'), 300);
+        }
+        mobileTabbar.addEventListener('click', (e) => {
+            const link = e.target.closest('.tab-link[data-page]');
+            if (!link) return;
+            e.preventDefault();
+            const page = link.dataset.page;
+            if (page === 'mapa') {
+                openMapModal();
+            } else {
+                switchPage(page + '-page');
+            }
+        });
+        tabbarMaisBtn.addEventListener('click', openMaisPanel);
+        maisPanel.addEventListener('click', (e) => {
+            if (e.target === maisPanel) closeMaisPanel(); // clique fora do painel fecha
+            const link = e.target.closest('.mais-link');
+            if (link) {
+                e.preventDefault();
+                const page = link.getAttribute('href').substring(1);
+                switchPage(page + '-page');
+                closeMaisPanel();
+            }
+        });
+        if (maisLogoutBtn) maisLogoutBtn.addEventListener('click', () => { closeMaisPanel(); logoutBtn.click(); });
         addCidadaoBtn.addEventListener('click', () => openCidadaoModal());
         addDemandaGeralBtn.addEventListener('click', () => openDemandaModal());
         viewMapBtn.addEventListener('click', () => openMapModal());
@@ -406,6 +444,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     a.parentElement.classList.add('hidden');
                 }
             });
+            // Mesma regra na barra inferior (mobile): some a aba Mapa
+            document.querySelectorAll('#mobile-tabbar .tab-link[data-page="mapa"]').forEach(a => {
+                a.classList.add('hidden');
+            });
+            // ...e os itens equivalentes no painel "Mais"
+            document.querySelectorAll('#mais-panel .mais-link').forEach(a => {
+                const href = a.getAttribute('href');
+                if (href === '#utilizadores' || href === '#cobertura' || href === '#backup') {
+                    a.parentElement.classList.add('hidden');
+                }
+            });
             // Botão delete nos cards é ocultado em buildCidadaoCard via state.userRole
         }
     }
@@ -557,6 +606,12 @@ document.addEventListener('DOMContentLoaded', () => {
             link.classList.remove('bg-slate-900', 'font-semibold');
             if (link.getAttribute('href') === `#${pageId.replace('-page', '')}`) {
                 link.classList.add('bg-slate-900', 'font-semibold');
+            }
+        });
+        document.querySelectorAll('#mobile-tabbar .tab-link').forEach(link => {
+            link.classList.remove('active');
+            if (link.dataset.page === pageId.replace('-page', '')) {
+                link.classList.add('active');
             }
         });
         if (pageId === 'dashboard-page') {
