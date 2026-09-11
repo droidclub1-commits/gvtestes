@@ -259,6 +259,19 @@ document.addEventListener('DOMContentLoaded', () => {
             const isOpen = document.getElementById('app-container').classList.toggle('menu-open');
             mobileMenuBtn.setAttribute('aria-expanded', String(isOpen));
         });
+        // ── Filtros recolhíveis no mobile (Cidadãos/Demandas/Cobertura) ──
+        function setupFiltersToggle(toggleId, wrapId) {
+            const toggle = document.getElementById(toggleId);
+            const wrap = document.getElementById(wrapId);
+            if (!toggle || !wrap) return;
+            toggle.addEventListener('click', () => {
+                const isOpen = wrap.classList.toggle('filters-collapsed') === false;
+                toggle.setAttribute('aria-expanded', String(isOpen));
+            });
+        }
+        setupFiltersToggle('cidadaos-filters-toggle', 'cidadaos-filters-wrap');
+        setupFiltersToggle('demandas-filters-toggle', 'demandas-filters-wrap');
+        setupFiltersToggle('cobertura-filters-toggle', 'cobertura-filters-wrap');
         addCidadaoBtn.addEventListener('click', () => openCidadaoModal());
         addDemandaGeralBtn.addEventListener('click', () => openDemandaModal());
         viewMapBtn.addEventListener('click', () => openMapModal());
