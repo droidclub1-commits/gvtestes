@@ -131,6 +131,33 @@ input:focus, select:focus, textarea:focus { outline: none !important; border-col
   #form-page .grid { gap: 22px; }
   #toast-container { top: 12px !important; left: 12px; right: 12px !important; }
   #toast-container > div { width: 100%; }
+
+  /* Cabeçalhos de Cidadãos/Utilizadores: título + botões de ação ficavam
+     numa única linha "flex" sem quebra (flex-wrap: nowrap por padrão) dentro
+     de um container com overflow-hidden. No desktop cabe tudo; no mobile os
+     botões que não cabem ficavam cortados (invisíveis) em vez de aparecer
+     espremidos. Aqui deixamos essa linha quebrar e os botões ocuparem a
+     largura toda, em vez de vazar pra fora do cabeçalho. */
+  #cidadaos-page > header > .flex.justify-between,
+  #utilizadores-page > header > .flex.justify-between {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+  #cidadaos-page > header > .flex.justify-between > div:last-child {
+    flex-wrap: wrap;
+    width: 100%;
+    gap: 8px !important;
+  }
+  #cidadaos-page > header > .flex.justify-between > div:last-child button {
+    flex: 1 1 calc(50% - 8px);
+    justify-content: center;
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+  #utilizadores-page > header > .flex.justify-between > #add-user-btn {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 @media (min-width: 701px) { #mobile-menu-btn { display: none !important; } }
