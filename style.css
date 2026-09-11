@@ -136,3 +136,16 @@ input:focus, select:focus, textarea:focus { outline: none !important; border-col
 @media (min-width: 701px) { #mobile-menu-btn { display: none !important; } }
 #mobile-menu-btn { position: fixed; top: 14px; left: 14px; z-index: 30; width: 42px; height: 42px; border: 1px solid var(--gc-border); border-radius: 12px; color: var(--gc-blue); background: #fff; box-shadow: 0 8px 18px rgba(15,42,74,.1); }
 #mobile-menu-btn svg { width: 20px; height: 20px; }
+
+/* ── Filtros recolhíveis (mobile) ────────────────────────────────────
+   Nas páginas com cabeçalho + filtros (Cidadãos/Demandas/Cobertura),
+   o cabeçalho sozinho podia tomar ~75% da tela no celular. O grupo de
+   filtros fica escondido por padrão no mobile (classe .filters-collapsed,
+   só tem efeito abaixo de 768px — em telas maiores os filtros sempre
+   aparecem, independente do estado do botão) até o utilizador tocar no
+   botão "Filtros" pra abrir. */
+@media (max-width: 767px) {
+  .filters-collapsed { display: none !important; }
+}
+.filters-toggle-icon { transition: transform .2s ease; }
+[aria-expanded="true"] .filters-toggle-icon { transform: rotate(180deg); }
