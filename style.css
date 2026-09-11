@@ -18,6 +18,12 @@
 html { scroll-behavior: smooth; }
 body { margin: 0; font-family: 'Inter', sans-serif; color: var(--gc-ink); background: var(--gc-gray); -webkit-font-smoothing: antialiased; }
 button, input, select, textarea { font: inherit; }
+/* Tailwind's .h-screen = height:100vh, que em navegadores mobile é calculado
+   de forma inconsistente com a barra de endereço (some/aparece ao rolar),
+   sobrando pouco espaço real de scroll. 100dvh (dynamic viewport height) já
+   é suportado nos navegadores mobile atuais e resolve isso; navegadores sem
+   suporte simplesmente ignoram a segunda declaração e mantêm o 100vh normal. */
+.h-screen { height: 100vh; height: 100dvh; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .65; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
@@ -106,7 +112,12 @@ input:focus, select:focus, textarea:focus { outline: none !important; border-col
 
 @media (max-width: 700px) {
   #login-page > div, #gate-page > div { padding: 28px 22px; }
-  #app-container { display: block !important; }
+  /* NOTA: removido "display: block !important" daqui — essa regra sobrescrevia
+     (por causa do !important) o display:none/flex que o JS aplica inline no
+     login-page/logout, fazendo o app-container (e o menu hambúrguer dentro dele)
+     ficar sempre visível no mobile mesmo antes do login. O JS já controla
+     display:flex/none via appContainer.style.display; aqui só cuidamos do
+     layout interno (aside como drawer) quando ele estiver visível. */
   #app-container > aside { position: fixed; inset: 0 auto 0 0; width: min(82vw, 290px); transform: translateX(-102%); transition: transform .25s ease; box-shadow: 18px 0 40px rgba(15,42,74,.25); }
   #app-container.menu-open > aside { transform: translateX(0); }
   #app-container > .flex-1 { min-height: 100vh; width: 100%; }
