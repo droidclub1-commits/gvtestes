@@ -130,6 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
         logoBtn = document.getElementById('logo-btn'); 
         logoutBtn = document.getElementById('logout-btn');
         sidebarNav = document.getElementById('sidebar-nav');
+        const mobileMenuBtn = document.getElementById('mobile-menu-btn');
         addCidadaoBtn = document.getElementById('add-cidadao-btn');
         addDemandaGeralBtn = document.getElementById('add-demanda-geral-btn');
         closeModalBtn = document.getElementById('close-modal-btn');
@@ -250,7 +251,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     switchPage(page + '-page');
                 }
+                document.getElementById('app-container')?.classList.remove('menu-open');
+                mobileMenuBtn?.setAttribute('aria-expanded', 'false');
             }
+        });
+        mobileMenuBtn?.addEventListener('click', () => {
+            const isOpen = document.getElementById('app-container').classList.toggle('menu-open');
+            mobileMenuBtn.setAttribute('aria-expanded', String(isOpen));
         });
         addCidadaoBtn.addEventListener('click', () => openCidadaoModal());
         addDemandaGeralBtn.addEventListener('click', () => openDemandaModal());
