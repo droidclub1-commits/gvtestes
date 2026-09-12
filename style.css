@@ -139,6 +139,8 @@ input:focus, select:focus, textarea:focus { outline: none !important; border-col
      espremidos. Aqui deixamos essa linha quebrar e os botões ocuparem a
      largura toda, em vez de vazar pra fora do cabeçalho. */
   #cidadaos-page > header > .flex.justify-between,
+  #demandas-page > header > .flex.justify-between,
+  #cobertura-page > header > .flex.justify-between,
   #utilizadores-page > header > .flex.justify-between {
     flex-wrap: wrap;
     row-gap: 10px;
@@ -154,6 +156,8 @@ input:focus, select:focus, textarea:focus { outline: none !important; border-col
     padding-left: 10px !important;
     padding-right: 10px !important;
   }
+  #demandas-page > header > .flex.justify-between > #add-demanda-geral-btn,
+  #cobertura-page > header > .flex.justify-between > #cobertura-excel-btn,
   #utilizadores-page > header > .flex.justify-between > #add-user-btn {
     width: 100%;
     justify-content: center;
