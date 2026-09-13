@@ -242,6 +242,8 @@ export async function handleCidadaoFormSubmit(e) {
             daughters: parseInt($('cidadao-daughters').value, 10) || 0,
             children: getChildrenData(),
             localtrabalho: v($('cidadao-local-trabalho').value),
+            nome_mae: v($('cidadao-nome-mae').value),
+            nome_pai: v($('cidadao-nome-pai').value),
             photourl: photoUrl || null,
             latitude: lat,
             longitude: long,
@@ -445,6 +447,8 @@ export async function openCidadaoModal(cidadaoId = null) {
             $('cidadao-whatsapp').checked = cidadao.whatsapp || false;
             $('cidadao-profissao').value = cidadao.profissao || '';
             $('cidadao-local-trabalho').value = cidadao.localtrabalho || '';
+            $('cidadao-nome-mae').value = cidadao.nome_mae || '';
+            $('cidadao-nome-pai').value = cidadao.nome_pai || '';
             $('cidadao-photo-url').value = cidadao.photourl || '';
             $('cidadao-lat').value = cidadao.latitude || '';
             $('cidadao-long').value = cidadao.longitude || '';
@@ -569,6 +573,8 @@ export async function openDetailsModal(cidadaoId) {
     $('details-address').textContent = addressParts.join(', ') || 'Não informado';
     $('details-cpf').textContent = cidadao.cpf || 'Não informado';
     $('details-rg').textContent = cidadao.rg || 'Não informado';
+    $('details-nome-mae').textContent = cidadao.nome_mae || 'Não informado';
+    $('details-nome-pai').textContent = cidadao.nome_pai || 'Não informado';
     const voterId = cidadao.voterid || '';
     const zona = cidadao.zona || '';
     const secao = cidadao.secao || '';
