@@ -172,7 +172,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 name,
                 dob: document.getElementById('c-dob').value || null,
                 sexo: document.getElementById('c-sexo').value || null,
-                type: document.getElementById('c-type').value || 'Outro',
+                type: 'Eleitor', // fixo — o formulário público não pergunta mais isso (LGPD: evita coletar opinião política via este campo)
                 cpf: v(document.getElementById('c-cpf').value),
                 localtrabalho: v(document.getElementById('c-escola').value),
                 phone: v(document.getElementById('c-phone').value),
