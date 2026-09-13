@@ -137,6 +137,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             showToast('O nome é obrigatório.', 'error');
             return;
         }
+        if (!document.getElementById('c-lgpd-consent').checked) {
+            showToast('É necessário concordar com o uso dos dados para continuar.', 'error');
+            return;
+        }
         saveBtn.disabled = true;
         saveBtn.innerHTML = '<div class="spinner"></div>';
 
@@ -161,6 +165,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             // antigo manda a senha genérica (sem leaderId).
             ...(leaderId ? { leaderId } : { password: accessPassword }),
             honeypot: document.getElementById('website').value,
+            // Servidor recusa o cadastro se isso não vier true — ver
+            // validação de lgpdConsent na Edge Function.
+            lgpdConsent: true,
             cidadao: {
                 name,
                 dob: document.getElementById('c-dob').value || null,
