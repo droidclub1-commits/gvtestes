@@ -182,6 +182,25 @@
                     <input type="text" id="c-escola" class="w-full border border-gray-300 p-2 rounded-lg">
                 </div>
 
+                <!-- ── Consentimento LGPD ──────────────────────────────────────
+                     Explica a finalidade da coleta e exige aceite explícito antes
+                     de liberar o botão Cadastrar. O aceite (com data/hora) fica
+                     registado no cidadão — ver lgpd_consent_at no backend. -->
+                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+                    <p class="text-xs text-gray-600 leading-relaxed">
+                        Usaremos os dados deste cadastro para fins de mobilização e organização política —
+                        por exemplo, para enviar lembretes e organizar o apoio da sua seção no dia da votação.
+                        Seus dados não serão vendidos nem repassados a terceiros fora dessa finalidade.
+                        Saiba mais na nossa <a href="privacidade.html" target="_blank" rel="noopener" class="text-blue-600 underline font-medium">Política de Privacidade</a>.
+                    </p>
+                    <div class="flex items-start gap-2">
+                        <input type="checkbox" id="c-lgpd-consent" required class="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded">
+                        <label for="c-lgpd-consent" class="text-sm text-gray-700">
+                            Li e concordo com a coleta e o uso dos meus dados conforme descrito acima e na Política de Privacidade. *
+                        </label>
+                    </div>
+                </div>
+
                 <div class="flex justify-end pt-4 border-t">
                     <button type="submit" id="save-btn-public"
                         class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg flex items-center justify-center gap-2">
@@ -194,4 +213,4 @@
 
     <script src="cadastro-publico.js"></script>
 </body>
-</html>
+                            </html>
