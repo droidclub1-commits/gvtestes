@@ -12,6 +12,10 @@ import { sb } from './config.js';
 
 let map = null;
 let markers = [];
+// ── Mapa de calor (Leaflet.heat) ────────────────────────────────────
+let heatLayer = null;
+let heatModeActive = false;
+let lastCidadaosPlotted = []; // cache do último lote plotado, pra montar o calor sem refazer a consulta
 
 function initializeMap() {
     if (map) { map.remove(); }
@@ -20,11 +24,54 @@ function initializeMap() {
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
     markers = [];
+    heatLayer = null;
+    heatModeActive = false;
+}
+
+// Alterna entre marcadores (com cluster) e mapa de calor. Ambos usam os
+// mesmos dados já buscados — não faz nenhuma consulta nova ao Supabase.
+function applyHeatMode() {
+    if (!map) return;
+    if (heatModeActive) {
+        if (map._clusterGroup) { map.removeLayer(map._clusterGroup); }
+        else { markers.forEach(m => { try { map.removeLayer(m); } catch (e) {} }); }
+        const points = lastCidadaosPlotted
+            .filter(c => c.latitude && c.longitude)
+            .map(c => [parseFloat(c.latitude), parseFloat(c.longitude), 0.6]);
+        if (heatLayer) { map.removeLayer(heatLayer); }
+        if (typeof L.heatLayer === 'function') {
+            heatLayer = L.heatLayer(points, { radius: 22, blur: 18, maxZoom: 15 });
+            heatLayer.addTo(map);
+        }
+    } else {
+        if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
+        if (map._clusterGroup) { map.addLayer(map._clusterGroup); }
+        else { markers.forEach(m => m.addTo(map)); }
+    }
+}
+
+function setupHeatmapToggle() {
+    const btn = document.getElementById('toggle-heatmap-btn');
+    if (!btn) return;
+    // Reseta visualmente pro estado "marcadores" toda vez que o mapa é reaberto
+    btn.classList.remove('bg-orange-500', 'text-white');
+    btn.classList.add('bg-gray-100', 'text-gray-700');
+    if (btn._wired) return; // listener só é adicionado uma vez
+    btn._wired = true;
+    btn.addEventListener('click', () => {
+        heatModeActive = !heatModeActive;
+        applyHeatMode();
+        btn.classList.toggle('bg-orange-500', heatModeActive);
+        btn.classList.toggle('text-white', heatModeActive);
+        btn.classList.toggle('bg-gray-100', !heatModeActive);
+        btn.classList.toggle('text-gray-700', !heatModeActive);
+    });
 }
 
 export async function openMapModal(cidadaosToPlot = null) {
     const mapModal = document.getElementById('map-modal');
     mapModal.classList.remove('hidden');
+    heatModeActive = false; // toda reabertura do mapa começa na visualização de marcadores
     if (!map) {
         initializeMap();
         await new Promise(resolve => setTimeout(resolve, 200));
@@ -33,6 +80,7 @@ export async function openMapModal(cidadaosToPlot = null) {
         markers = [];
         // Remove cluster anterior se existir
         if (map._clusterGroup) { map.removeLayer(map._clusterGroup); map._clusterGroup = null; }
+        if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
     }
     if (map) map.invalidateSize();
 
@@ -47,6 +95,7 @@ export async function openMapModal(cidadaosToPlot = null) {
             .limit(5000); // limite razoável para o mapa
         cidadaos = data || [];
     }
+    lastCidadaosPlotted = cidadaos;
 
     const bounds = [];
     // PERFORMANCE: usa MarkerClusterGroup se disponível, senão marcadores normais
@@ -80,6 +129,7 @@ export async function openMapModal(cidadaosToPlot = null) {
     } else {
         map.setView([-0.03964, -51.18182], 13);
     }
+    setupHeatmapToggle();
 }
 
 export function closeMapModal() {
