@@ -11,6 +11,11 @@ const FUNCTION_URL = `${SUPABASE_URL}/functions/v1/public-cadastro`;
 // nem escrita neste arquivo. Some ao recarregar a página.
 let accessPassword = null;
 
+// Preenchido quando a página é aberta via ?leader=<id> e o id é validado
+// no servidor. Nesse caso não existe senha — o próprio link autoriza o
+// cadastro, e todo cidadão criado nesta sessão entra sob essa liderança.
+let leaderId = null;
+
 function showToast(message, type = 'success') {
     const container = document.getElementById('toast-container');
     const toast = document.createElement('div');
@@ -57,11 +62,12 @@ async function callFunction(payload) {
     return { ok: res.ok && json.ok, status: res.status, data: json };
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     applyMask('c-cpf', '999.999.999-99');
     applyMask('c-phone', '(99) 99999-9999');
     applyMask('c-cep', '99999-999');
 
+    const invalidLinkPage = document.getElementById('invalid-link-page');
     const gatePage = document.getElementById('gate-page');
     const formPage = document.getElementById('form-page');
     const gateForm = document.getElementById('gate-form');
@@ -69,30 +75,59 @@ document.addEventListener('DOMContentLoaded', () => {
     const gatePassword = document.getElementById('gate-password');
     const cidadaoForm = document.getElementById('cidadao-form-public');
     const saveBtn = document.getElementById('save-btn-public');
+    const leaderBanner = document.getElementById('leader-banner');
+    const leaderBannerName = document.getElementById('leader-banner-name');
+    const indicadoPorGroup = document.getElementById('indicado-por-group');
 
-    gateForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        gateBtn.disabled = true;
-        gateBtn.innerHTML = '<div class="spinner"></div>';
+    // ── Link exclusivo de liderança (?leader=<id>) ──────────────────────
+    // Se presente, pula completamente o portão de senha: valida o id no
+    // servidor e, se for uma liderança de verdade, libera o formulário
+    // direto, já vinculando todo mundo cadastrado nesta sessão a ela.
+    const urlLeaderId = new URLSearchParams(window.location.search).get('leader');
+    if (urlLeaderId) {
+        // Fluxo por link de liderança: sem senha, sem portão.
+        gatePage.classList.add('hidden');
         try {
-            const { ok, status, data } = await callFunction({ action: 'verify', password: gatePassword.value });
-            if (!ok) {
-                if (status === 401) showToast('Chave de acesso incorreta.', 'error');
-                else showToast(data.error || 'Erro ao verificar a chave.', 'error');
-                return;
+            const { ok, data } = await callFunction({ action: 'get-leader-info', leaderId: urlLeaderId });
+            if (ok && data.name) {
+                leaderId = urlLeaderId;
+                leaderBannerName.textContent = data.name;
+                leaderBanner.classList.remove('hidden');
+                indicadoPorGroup.classList.add('hidden');
+                formPage.classList.remove('hidden');
+            } else {
+                invalidLinkPage.classList.remove('hidden');
             }
-            accessPassword = gatePassword.value;
-            gatePassword.value = '';
-            gatePage.classList.add('hidden');
-            formPage.classList.remove('hidden');
         } catch (err) {
             console.error(err);
-            showToast('Erro de conexão. Tente novamente.', 'error');
-        } finally {
-            gateBtn.disabled = false;
-            gateBtn.innerHTML = 'Entrar';
+            invalidLinkPage.classList.remove('hidden');
         }
-    });
+    } else {
+        // Fluxo antigo: portão de senha genérica.
+        gateForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            gateBtn.disabled = true;
+            gateBtn.innerHTML = '<div class="spinner"></div>';
+            try {
+                const { ok, status, data } = await callFunction({ action: 'verify', password: gatePassword.value });
+                if (!ok) {
+                    if (status === 401) showToast('Chave de acesso incorreta.', 'error');
+                    else showToast(data.error || 'Erro ao verificar a chave.', 'error');
+                    return;
+                }
+                accessPassword = gatePassword.value;
+                gatePassword.value = '';
+                gatePage.classList.add('hidden');
+                formPage.classList.remove('hidden');
+            } catch (err) {
+                console.error(err);
+                showToast('Erro de conexão. Tente novamente.', 'error');
+            } finally {
+                gateBtn.disabled = false;
+                gateBtn.innerHTML = 'Entrar';
+            }
+        });
+    }
 
     cidadaoForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -105,20 +140,26 @@ document.addEventListener('DOMContentLoaded', () => {
         saveBtn.disabled = true;
         saveBtn.innerHTML = '<div class="spinner"></div>';
 
-        // "Indicado por" não tem coluna própria no banco — é anexado ao
-        // campo Complemento do endereço como observação de texto.
+        // "Indicado por" só existe no fluxo antigo (sem liderança na URL) —
+        // não tem coluna própria no banco, é anexado ao Complemento como
+        // texto. No fluxo por link de liderança o vínculo já é estruturado
+        // (campo `leader`), então esse campo fica oculto e é ignorado aqui.
         const complementoBase = v(document.getElementById('c-complemento').value);
-        const indicadoPor = v(document.getElementById('c-indicadopor').value);
         let complementoFinal = complementoBase;
-        if (indicadoPor) {
-            complementoFinal = complementoBase
-                ? `${complementoBase} | Indicado por: ${indicadoPor}`
-                : `Indicado por: ${indicadoPor}`;
+        if (!leaderId) {
+            const indicadoPor = v(document.getElementById('c-indicadopor').value);
+            if (indicadoPor) {
+                complementoFinal = complementoBase
+                    ? `${complementoBase} | Indicado por: ${indicadoPor}`
+                    : `Indicado por: ${indicadoPor}`;
+            }
         }
 
         const payload = {
             action: 'create',
-            password: accessPassword,
+            // No fluxo de liderança manda leaderId (sem senha); no fluxo
+            // antigo manda a senha genérica (sem leaderId).
+            ...(leaderId ? { leaderId } : { password: accessPassword }),
             honeypot: document.getElementById('website').value,
             cidadao: {
                 name,
@@ -142,8 +183,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const { ok, status, data } = await callFunction(payload);
             if (!ok) {
                 if (status === 401) {
-                    showToast('Sua sessão expirou. Digite a chave novamente.', 'error');
-                    resetFormPageState();
+                    if (leaderId) {
+                        // Liderança removida/invalidada em algum momento desta sessão.
+                        formPage.classList.add('hidden');
+                        document.getElementById('invalid-link-page').classList.remove('hidden');
+                    } else {
+                        showToast('Sua sessão expirou. Digite a chave novamente.', 'error');
+                        resetFormPageState();
+                    }
                     return;
                 }
                 throw new Error(data.error || 'Erro ao cadastrar.');
