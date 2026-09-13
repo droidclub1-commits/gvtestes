@@ -36,14 +36,17 @@ export async function updateDashboard() {
                 const { count } = await sb.from('cidadaos').select('*', { count: 'exact', head: true });
                 totalEl.textContent = count || 0;
             }
+            totalEl.classList.remove('animate-pulse');
         })(),
         (async () => {
             // Contador de demandas — busca do servidor para reflectir total real
+            const totalDemandasEl = document.getElementById('dashboard-total-demandas');
             try {
                 const { count: cntDemandas } = await sb
                     .from('demandas').select('*', { count: 'exact', head: true });
-                document.getElementById('dashboard-total-demandas').textContent = cntDemandas || 0;
+                totalDemandasEl.textContent = cntDemandas || 0;
             } catch(e) { /* mantém o valor anterior */ }
+            totalDemandasEl.classList.remove('animate-pulse');
         })()
     ]);
     // Gráficos e widgets em paralelo — não dependem uns dos outros
@@ -405,4 +408,4 @@ async function updateCidadaosPorFaixaEtariaChart() {
             options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
         });
     } catch(e) { console.warn('Chart faixa etária:', e); }
-          }
+}
