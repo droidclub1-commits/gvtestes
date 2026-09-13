@@ -14,7 +14,7 @@ export async function generateExcelReport(serverSearchState) {
     showToast("A gerar Excel...", "info");
     const s = serverSearchState;
     let query = sb.from('cidadaos').select(
-        'name, cpf, rg, voterid, zona, secao, dob, sexo, type, phone, whatsapp, email, profissao, localtrabalho, logradouro, numero, complemento, bairro, cidade, estado, cep'
+        'name, cpf, rg, voterid, zona, secao, dob, sexo, type, phone, whatsapp, email, profissao, localtrabalho, nome_mae, nome_pai, logradouro, numero, complemento, bairro, cidade, estado, cep'
     );
     if (s.search)  query = query.or(`name.ilike.%${s.search}%,email.ilike.%${s.search}%,cpf.ilike.%${s.search}%,voterid.ilike.%${s.search}%`);
     if (s.type)    query = query.eq('type', s.type);
@@ -34,7 +34,7 @@ export async function generateExcelReport(serverSearchState) {
     // Cabeçalhos do Excel
     const headers = [
         'Nome', 'CPF', 'RG', 'Título de Eleitor', 'Zona', 'Seção', 'Data Nasc.', 'Sexo', 'Tipo',
-        'Telefone', 'WhatsApp', 'Email', 'Profissão', 'Local de Trabalho',
+        'Telefone', 'WhatsApp', 'Email', 'Profissão', 'Local de Trabalho', 'Nome da Mãe', 'Nome do Pai',
         'Logradouro', 'Número', 'Complemento', 'Bairro', 'Cidade', 'Estado', 'CEP'
     ];
 
@@ -53,6 +53,8 @@ export async function generateExcelReport(serverSearchState) {
         c.email || '',
         c.profissao || '',
         c.localtrabalho || '',
+        c.nome_mae || '',
+        c.nome_pai || '',
         c.logradouro || '',
         c.numero || '',
         c.complemento || '',
