@@ -593,6 +593,19 @@ export async function openDetailsModal(cidadaoId) {
         _onOpenMap([cidadao]);
     };
     $('details-share-location-btn').onclick = () => shareLocation(cidadao);
+    // Link de cadastro exclusivo — só faz sentido para cidadãos do tipo "Liderança".
+    // Quem se cadastra por esse link já entra automaticamente sob essa liderança
+    // (sem precisar de senha de acesso — ver cadastro-publico.js/public-cadastro).
+    const copyLinkBtn = $('details-copy-link-btn');
+    if (copyLinkBtn) {
+        if (cidadao.type === 'Liderança') {
+            copyLinkBtn.classList.remove('hidden');
+            copyLinkBtn.onclick = () => copyLeaderCadastroLink(cidadao);
+        } else {
+            copyLinkBtn.classList.add('hidden');
+            copyLinkBtn.onclick = null;
+        }
+    }
     detailsModal.classList.remove('hidden');
     setTimeout(() => { content.classList.remove('scale-95', 'opacity-0'); }, 10);
 }
@@ -605,6 +618,20 @@ export function closeDetailsModal() {
         detailsModal.classList.add('hidden');
         currentCidadaoIdForDetails = null;
     }, 300);
+}
+
+// Monta o link público de cadastro exclusivo desta liderança e copia
+// para a área de transferência. Resolvido com base na própria URL do
+// app, então funciona independente de domínio/subpasta de hospedagem.
+export function copyLeaderCadastroLink(cidadao) {
+    const link = new URL(`cadastro-publico.html?leader=${encodeURIComponent(cidadao.id)}`, window.location.href).toString();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(link)
+            .then(() => showToast(`Link de cadastro de ${cidadao.name} copiado!`, 'success'))
+            .catch(() => showToast('Não foi possível copiar. Link: ' + link, 'error'));
+    } else {
+        showToast('Copie manualmente: ' + link, 'warning');
+    }
 }
 
 export function shareLocation(cidadao) {
