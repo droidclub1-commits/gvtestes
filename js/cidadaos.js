@@ -140,6 +140,37 @@ export async function loadCidadaosPage(reset = false) {
     if (countEl) countEl.textContent = `${totalCidadaosCount} encontrado(s)`;
 }
 
+// Geocodifica o endereço tentando níveis progressivamente menos específicos.
+// Sem isso, endereços não encontrados exatamente no OpenStreetMap (comum em
+// municípios pequenos/rurais) ficavam sem nenhum pin no mapa — mesmo quando
+// bairro/cidade eram encontráveis. Cada tentativa usa parâmetros estruturados
+// do Nominatim (mais precisos que uma busca de texto livre) e o resultado
+// mais específico que retornar algo é usado.
+async function geocodeComFallback({ numero, logradouro, bairro, cidade, estado }) {
+    const tentativas = [
+        { street: `${numero ? numero + ' ' : ''}${logradouro}`.trim(), city: cidade, state: estado },
+        { street: bairro, city: cidade, state: estado },
+        { city: cidade, state: estado }
+    ];
+    for (const t of tentativas) {
+        if (!t.city) continue;
+        const params = new URLSearchParams({ format: 'json', limit: '1', countrycodes: 'br' });
+        if (t.street) params.set('street', t.street);
+        params.set('city', t.city);
+        if (t.state) params.set('state', t.state);
+        try {
+            const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`);
+            const data = await response.json();
+            if (data && data.length > 0) {
+                return { lat: parseFloat(data[0].lat), long: parseFloat(data[0].lon) };
+            }
+        } catch (geocodeError) {
+            console.error(geocodeError);
+        }
+    }
+    return { lat: null, long: null };
+}
+
 export async function handleCidadaoFormSubmit(e) {
     e.preventDefault();
     if (!state.user) {
@@ -169,19 +200,18 @@ export async function handleCidadaoFormSubmit(e) {
         }
         const cidadaoLogradouro = $('cidadao-logradouro'), cidadaoBairro = $('cidadao-bairro'),
               cidadaoCidade = $('cidadao-cidade'), cidadaoEstado = $('cidadao-estado');
+        const cidadaoNumero = $('cidadao-numero');
         let lat = null, long = null;
-        const address = `${cidadaoLogradouro.value}, ${cidadaoBairro.value}, ${cidadaoCidade.value}, ${cidadaoEstado.value}`;
         if (cidadaoLogradouro.value && cidadaoCidade.value) {
-            try {
-                const response = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`);
-                const data = await response.json();
-                if (data && data.length > 0) {
-                    lat = parseFloat(data[0].lat);
-                    long = parseFloat(data[0].lon);
-                }
-            } catch (geocodeError) {
-                console.error(geocodeError);
-            }
+            const geo = await geocodeComFallback({
+                numero: cidadaoNumero.value,
+                logradouro: cidadaoLogradouro.value,
+                bairro: cidadaoBairro.value,
+                cidade: cidadaoCidade.value,
+                estado: cidadaoEstado.value
+            });
+            lat = geo.lat;
+            long = geo.long;
         }
         const v = s => s && s.trim() ? s.trim() : null; // helper: vazio → null
         const cidadaoType = $('cidadao-type');
