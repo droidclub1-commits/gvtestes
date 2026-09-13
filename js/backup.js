@@ -69,7 +69,8 @@ export async function backupData(format) {
             const headers = [
                 'Nome','CPF','RG','Título Eleitor','Zona','Seção',
                 'Data Nasc.','Sexo','Tipo','Telefone','WhatsApp','Email',
-                'Profissão','Local Trabalho','Logradouro','Número',
+                'Profissão','Local Trabalho','Nome da Mãe','Nome do Pai',
+                'Logradouro','Número',
                 'Complemento','Bairro','Cidade','Estado','CEP',
                 'Liderança','Filhos','Filhas','Cadastrado em'
             ];
@@ -83,7 +84,7 @@ export async function backupData(format) {
                 c.dob ? formatarData(c.dob) : '',
                 c.sexo, c.type,
                 c.phone, c.whatsapp ? 'Sim' : 'Não', c.email,
-                c.profissao, c.localtrabalho,
+                c.profissao, c.localtrabalho, c.nome_mae, c.nome_pai,
                 c.logradouro, c.numero, c.complemento, c.bairro,
                 c.cidade, c.estado, c.cep,
                 leaderMap.get(c.leader) || '',
